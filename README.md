@@ -29,7 +29,7 @@ Page 1 · tickets 1–3 · next: tforge list --page 2 --limit 3
   up, and retries with backoff on 429 and transient errors
 - Colored tables, a `--json` flag on every read/write command for scripting, and
   meaningful exit codes
-- 59 tests with mocked HTTP
+- 139 tests with mocked HTTP, 99% line coverage
 
 ## Installation
 
@@ -204,11 +204,15 @@ tests/            # pytest + respx (mocked HTTP)
 ```bash
 pip install -e '.[dev]'
 pytest
+pytest --cov                # with a coverage report; fails below 95%
 ```
 
-The tests cover error mapping, retries and 429/`Retry-After` handling, waiting
-for the quota to reset, page-number paging over the cursor API, merge-before-update, client-side
-filtering, config precedence, and the main CLI flows.
+The tests cover error mapping, retries and 429/`Retry-After` handling (including
+HTTP-date values and the 60s cap), waiting for the quota to reset, page-number paging over
+the cursor API, lazy interactive paging and its keys, merge-before-update, client-side
+filtering, config precedence and file permissions, and every CLI command, including
+prompts, confirmations, `--json` output and exit codes. The suite doesn't depend on the
+shell it runs in: it passes with `FORCE_COLOR`, `NO_COLOR` or any terminal width.
 
 ## Design notes
 
