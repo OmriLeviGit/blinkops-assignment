@@ -134,7 +134,7 @@ class TicketForgeClient:
 
     @staticmethod
     def _backoff(attempt: int) -> float:
-        return min(0.5 * 2 ** (attempt - 1) + random.uniform(0, 0.25), MAX_WAIT_SECONDS)
+        return min(0.5 * 2.0 ** (attempt - 1) + random.uniform(0, 0.25), MAX_WAIT_SECONDS)
 
     def _wait(self, seconds: float, reason: str) -> None:
         if self._on_wait:
