@@ -73,7 +73,12 @@ Missing field → `400 {"err":"missing_fields","message":"username and password 
 - A non-numeric `limit` (e.g. `abc`) causes an internal Prisma error that leaks
   the query: `400 {"err":"server_error", ..., "retryable":true}`.
 - `nextCursor` has the form `<createdAt ISO>:<internal id>` and appears only when
-  `hasMore` is true. A malformed cursor returns `400 invalid_cursor`.
+  `hasMore` is true. A malformed cursor returns `400 invalid_cursor`, and so does
+  a well-formed one that doesn't match an existing ticket ("cursor does not
+  correspond to a valid ticket"), so cursors can't be forged to jump ahead.
+- **There is no offset-based access.** `page`, `offset`, `skip` and `start` are
+  all ignored. Reaching the Nth item means following the cursor through the
+  earlier pages.
 - List items do **not** include `dependsOn`, `customFields` or `owner`.
 - Unknown query parameters (e.g. `stage=open`) are silently ignored, so there is no
   server-side filtering.

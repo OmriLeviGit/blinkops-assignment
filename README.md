@@ -6,7 +6,6 @@ from the web app; the findings are documented in [docs/API.md](docs/API.md).
 
 ```
 $ tforge list -n 3
-Page 1
 ┏━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
 ┃ Ref    ┃ Stage  ┃ Title             ┃ Description          ┃ Updated          ┃
 ┡━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
@@ -14,7 +13,7 @@ Page 1
 │ TF-593 │ open   │ test1             │ test2                │ 2026-10-28 14:08 │
 │ TF-592 │ open   │ Ticket 5          │                      │ 2026-10-28 14:06 │
 └────────┴────────┴───────────────────┴──────────────────────┴──────────────────┘
-Show more? [Y/n]:
+Page 1 · tickets 1–3 · next: tforge list --page 2 --limit 3
 ```
 
 ## Features
@@ -23,14 +22,14 @@ Show more? [Y/n]:
 - **Create, list, update** tickets, plus **show** and **delete**
 - **Safe partial updates**: only the options you pass are changed (the raw API
   silently wipes fields you leave out of an update)
-- **Pagination**: interactive "Show more?" paging, `--all`, or resumable `--cursor`
+- **Pagination**: `--page`/`--limit`, `--all`, or an interactive browser (`-i`) with next/prev keys
 - **Stage filter** (`--stage`), dependencies (`--add-dep`, `--remove-dep`, ...) and
   **custom fields** (`--field priority=high`, `tforge fields ...`)
 - **Rate-limit handling**: waits for the window to reset when the quota is used
   up, and retries with backoff on 429 and transient errors
 - Colored tables, a `--json` flag on every read/write command for scripting, and
   meaningful exit codes
-- 48 tests with mocked HTTP
+- 54 tests with mocked HTTP
 
 ## Installation
 
@@ -89,16 +88,32 @@ If you leave out the title, you'll be prompted for it.
 ### List
 
 ```bash
-tforge list                      # 10 per page, then asks "Show more?"
-tforge list -n 25                # bigger pages
-tforge list --all                # everything, no prompts
-tforge list --stage in_progress  # filter by stage
-tforge list --cursor '<cursor>'  # resume where a previous non-interactive run stopped
-tforge list --json               # machine-readable
+tforge list                        # page 1, 10 tickets per page
+tforge list --page 2 --limit 5     # any page, any page size
+tforge list --all                  # every ticket, no paging
+tforge list --stage in_progress    # filter by stage (paging applies to the filtered list)
+tforge list --json                 # machine-readable
 ```
 
-When output isn't a terminal (or with `--no-pager`), `list` prints the command
-to fetch the next page instead of prompting.
+The footer shows where you are and the command for the next page:
+
+```
+Page 2 · tickets 6–10 · next: tforge list --page 3 --limit 5
+```
+
+#### Interactive browsing
+
+```bash
+tforge list --interactive          # or -i; combine with --limit and --stage
+```
+
+```
+Page 1/3 · 23 tickets · [n]ext  [p]rev  [q]uit >
+```
+
+Single keypresses: `n`/space/→ for next, `p`/← for previous, `q`/Esc to quit.
+Interactive mode fetches the whole (filtered) list once, then pages locally,
+so moving between pages is instant and the page total is exact.
 
 ### Show
 
@@ -156,7 +171,7 @@ src/ticketforge_cli/
 ├── cli.py        # Typer commands (thin: parse args, call services, render)
 ├── views.py      # rich tables/panels, colors, JSON output
 ├── services.py   # ticket logic: merge-before-update, filtering, field validation
-├── client.py     # HTTP: auth, retries, rate limits, error mapping, pagination
+├── client.py     # HTTP: auth, retries, rate limits, error mapping, cursor walking
 ├── models.py     # lenient dataclasses (tolerate missing/extra fields)
 ├── errors.py     # exception hierarchy, mapped from the API's `err` codes
 └── config.py     # config file + env overrides
@@ -173,7 +188,7 @@ pytest
 ```
 
 The tests cover error mapping, retries and 429/`Retry-After` handling, waiting
-for the quota to reset, cursor pagination, merge-before-update, client-side
+for the quota to reset, page-number paging over the cursor API, merge-before-update, client-side
 filtering, config precedence, and the main CLI flows.
 
 ## Design notes
@@ -199,11 +214,15 @@ filtering, config precedence, and the main CLI flows.
 - **Credentials are stored in plaintext** in `~/.config/ticketforge/config.json`
   (file mode `0600`). The API only supports Basic auth, so there is no token to store
   instead. Use the environment variables if you'd rather not write a file.
-- **Page size is capped at 5 by the server.** Larger `-n` values are fetched as
-  several requests, and each one counts against the rate limit (50 per ~60s window).
+- **The API only supports cursor paging, at most 5 tickets per request.**
+  There is no offset or page parameter (`page`, `offset` and `skip` are ignored),
+  and cursors must point at a real ticket, so `--page N` walks the cursor from
+  the start: page N of size L costs about `N×L/5` requests against the 50/min
+  rate limit. That's fine for personal ticket lists, but would need server
+  support to scale to very large ones.
 - **Stage filtering is client-side**, since the server ignores filter parameters.
-  Filtering pages through tickets until it finds enough matches, and resuming a
-  filtered listing with `--cursor` may repeat a few rows (but never skips any).
+  The filter is applied before paging, which means scanning tickets until enough
+  matches are found.
 - **The list endpoint omits dependencies and custom fields**, so they appear
   in `show` but not in the `list` table. Fetching each ticket would cost one request per row.
 - **A 429 was never observed live.** The rate limiter appears to be per serverless
