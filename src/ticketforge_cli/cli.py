@@ -14,7 +14,7 @@ from . import views
 from .client import TicketForgeClient
 from .config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
-from .services import TicketPager, TicketService, parse_field_assignments
+from .services import TicketPager, TicketService, normalize_stage, parse_field_assignments
 
 app = typer.Typer(
     help="Manage TicketForge tickets from the terminal.",
@@ -229,9 +229,11 @@ def browse(
         views.console.print(f"{position} · {'  '.join(actions)} > ", end="")
 
         try:
-            key = read_key().lower()
+            key = read_key()
         except (KeyboardInterrupt, typer.Abort):
             key = "q"
+        if len(key) == 1:
+            key = key.lower()  # arrow keys arrive as case-sensitive escape sequences
         if key in QUIT_KEYS:
             views.console.print()
             return
@@ -265,6 +267,8 @@ def create(
     as_json: JsonOpt = False,
 ) -> None:
     """Create a ticket."""
+    # Validate up front: the stage is applied by a second request, after the ticket exists.
+    stage = normalize_stage(stage) if stage else None
     svc = get_service()
     title = title or typer.prompt("Title")
     ticket = svc.create_ticket(
@@ -273,7 +277,7 @@ def create(
         depends_on=depends_on or [],
         fields=parse_field_assignments(field or []),
     )
-    if stage and stage.strip().lower() != "open":
+    if stage and stage != "open":
         # The create endpoint has no stage; new tickets always start as "open".
         ticket = svc.update_ticket(ticket.ref, stage=stage)
     if as_json:

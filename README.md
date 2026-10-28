@@ -29,7 +29,7 @@ Page 1 · tickets 1–3 · next: tforge list --page 2 --limit 3
   up, and retries with backoff on 429 and transient errors
 - Colored tables, a `--json` flag on every read/write command for scripting, and
   meaningful exit codes
-- 61 tests with mocked HTTP
+- 141 tests with mocked HTTP, 99% line coverage
 
 ## Installation
 
@@ -224,11 +224,15 @@ scripts/gen_cli_docs.py  # regenerates docs/CLI.md
 ```bash
 pip install -e '.[dev]'
 pytest
+pytest --cov                # with a coverage report; fails below 95%
 ```
 
-The tests cover error mapping, retries and 429/`Retry-After` handling, waiting
-for the quota to reset, page-number paging over the cursor API, merge-before-update, client-side
-filtering, config precedence, and the main CLI flows. A docs test also fails if
+The tests cover error mapping, retries and 429/`Retry-After` handling (including
+HTTP-date values and the 60s cap), waiting for the quota to reset, page-number paging over
+the cursor API, lazy interactive paging and its keys, merge-before-update, client-side
+filtering, config precedence and file permissions, and every CLI command, including
+prompts, confirmations, `--json` output and exit codes. The suite doesn't depend on the
+shell it runs in: it passes with `FORCE_COLOR`, `NO_COLOR` or any terminal width. A docs test also fails if
 [docs/CLI.md](docs/CLI.md) no longer matches the code. After changing any
 command or flag, regenerate it:
 

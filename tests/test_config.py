@@ -3,7 +3,7 @@ import stat
 
 import pytest
 
-from ticketforge_cli.config import DEFAULT_BASE_URL, Config, load_config, save_config
+from ticketforge_cli.config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
 from ticketforge_cli.errors import ConfigError
 
 
@@ -41,3 +41,28 @@ def test_corrupt_file_raises_config_error(tmp_path):
     path.write_text("{not json")
     with pytest.raises(ConfigError):
         load_config(path)
+
+
+def test_config_path_respects_xdg_config_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    assert config_path() == tmp_path / "ticketforge" / "config.json"
+
+
+def test_config_path_override_expands_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("TFORGE_CONFIG", "~/tf.json")
+    assert config_path() == tmp_path / "tf.json"
+
+
+def test_empty_base_url_in_file_falls_back_to_default(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"base_url": "", "username": "u", "password": "p"}))
+    assert load_config(path).base_url == DEFAULT_BASE_URL
+
+
+def test_save_tightens_permissions_of_an_existing_file(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text("{}")
+    path.chmod(0o644)
+    save_config(Config(username="u", password="p"), path)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600

@@ -1,3 +1,10 @@
+import os
+
+# rich reads these when `views.console` is created at import time, before any fixture runs.
+for _var in ("FORCE_COLOR", "NO_COLOR", "TTY_COMPATIBLE"):
+    os.environ.pop(_var, None)
+os.environ["COLUMNS"] = "200"
+
 import pytest
 import respx
 
@@ -5,6 +12,13 @@ from ticketforge_cli.client import TicketForgeClient
 
 BASE = "https://tf.test"
 API = BASE + "/api/tforge"
+
+
+@pytest.fixture(autouse=True)
+def isolated_env(monkeypatch):
+    """Keep the caller's TicketForge settings out of the tests."""
+    for var in ("TFORGE_BASE_URL", "TFORGE_USERNAME", "TFORGE_PASSWORD", "TFORGE_CONFIG"):
+        monkeypatch.delenv(var, raising=False)
 
 
 @pytest.fixture

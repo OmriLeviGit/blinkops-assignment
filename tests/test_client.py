@@ -1,19 +1,23 @@
 import base64
+import json
 from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 import httpx
 import pytest
 
+from ticketforge_cli.client import MAX_WAIT_SECONDS, TicketForgeClient
 from ticketforge_cli.errors import (
     AuthError,
     ForbiddenError,
     NotFoundError,
     RateLimitError,
     ServerError,
+    TicketForgeError,
     ValidationError,
 )
 
-from .conftest import workitem
+from .conftest import BASE, workitem
 
 
 def err(code, message="boom", status=400, retryable=False, headers=None):
@@ -169,3 +173,129 @@ def test_network_errors_retry_for_get(client, api, sleeps):
     )
     client.list_custom_fields()
     assert len(sleeps) == 1
+
+
+# ------------------------------------------------------------------ error fallbacks
+
+
+def test_500_with_non_json_body(client, api, sleeps):
+    api.get("/custom-fields").mock(return_value=httpx.Response(500, text="<html>oops</html>"))
+    with pytest.raises(ServerError, match="HTTP 500"):
+        client.list_custom_fields()
+    assert len(sleeps) == client.max_retries  # 5xx on a GET is transient
+
+
+def test_unknown_err_code_falls_back_to_base_error(client, api):
+    api.get("/custom-fields").mock(return_value=httpx.Response(400, json={"err": "teapot"}))
+    with pytest.raises(TicketForgeError) as info:
+        client.list_custom_fields()
+    assert type(info.value) is TicketForgeError
+    assert info.value.message == "teapot" and info.value.status == 400
+
+
+def test_network_error_on_post_is_not_retried(client, api, sleeps):
+    route = api.post("/workitem/publish").mock(side_effect=httpx.ConnectError("down"))
+    with pytest.raises(TicketForgeError, match="could not reach TicketForge"):
+        client.create_workitem({"title": "x"})
+    assert route.call_count == 1 and sleeps == []
+
+
+def test_network_error_gives_up_after_max_retries(client, api, sleeps):
+    api.get("/custom-fields").mock(side_effect=httpx.ReadTimeout("slow"))
+    with pytest.raises(TicketForgeError, match="could not reach"):
+        client.list_custom_fields()
+    assert len(sleeps) == client.max_retries
+
+
+# ------------------------------------------------------------------ waits
+
+
+def test_retry_after_as_http_date(client, api, sleeps):
+    when = format_datetime(datetime.now(timezone.utc) + timedelta(seconds=10), usegmt=True)
+    api.get("/custom-fields").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": when}),
+            httpx.Response(200, json={"customFields": []}),
+        ]
+    )
+    client.list_custom_fields()
+    assert len(sleeps) == 1 and 8 < sleeps[0] <= 10
+
+
+def test_waits_are_capped(client, api, sleeps):
+    api.get("/custom-fields").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "3600"}),
+            httpx.Response(200, json={"customFields": []}),
+        ]
+    )
+    client.list_custom_fields()
+    assert sleeps == [MAX_WAIT_SECONDS]
+
+
+def test_unparseable_retry_after_falls_back_to_backoff(client, api, sleeps):
+    api.get("/custom-fields").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "soon"}),
+            httpx.Response(200, json={"customFields": []}),
+        ]
+    )
+    client.list_custom_fields()
+    assert len(sleeps) == 1 and 0.5 <= sleeps[0] <= 0.75
+
+
+def test_malformed_rate_headers_are_ignored(client, api):
+    api.get("/custom-fields").respond(
+        json={"customFields": []}, headers={"x-ratelimit-remaining": "lots", "x-ratelimit-reset": "later"}
+    )
+    client.list_custom_fields()
+    assert client.rate_remaining is None
+
+
+def test_on_wait_is_told_why(api):
+    waits = []
+    c = TicketForgeClient(BASE, "alice", "pw", sleep=lambda s: None, on_wait=lambda s, why: waits.append(why))
+    api.get("/custom-fields").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "0"}),
+            httpx.Response(200, json={"customFields": []}),
+        ]
+    )
+    c.list_custom_fields()
+    c.close()
+    assert waits == ["rate limited"]
+
+
+# ------------------------------------------------------------------ endpoints
+
+
+def test_get_workitem_asks_for_the_deep_view(client, api):
+    route = api.get("/workitem/TF-1").respond(json={"workitem": workitem("TF-1")})
+    client.get_workitem("TF-1")
+    assert route.calls.last.request.url.params["view"] == "deep"
+
+
+def test_custom_field_endpoints(client, api):
+    created = api.post("/custom-fields").respond(json={"customField": {"id": "f1", "name": "team", "label": "Team"}})
+    updated = api.put("/custom-fields/f1").respond(json={"customField": {"id": "f1", "name": "team", "label": "Squad"}})
+    deleted = api.delete("/custom-fields/f1").respond(json={})
+
+    assert client.create_custom_field("team", "Team").id == "f1"
+    assert json.loads(created.calls.last.request.content) == {"name": "team", "label": "Team"}
+    assert client.update_custom_field("f1", "Squad").label == "Squad"
+    assert json.loads(updated.calls.last.request.content) == {"label": "Squad"}
+    client.delete_custom_field("f1")
+    assert deleted.called
+
+
+def test_delete_workitem_with_empty_response(client, api):
+    route = api.delete("/workitem/TF-1").respond(204)
+    client.delete_workitem("TF-1")
+    assert route.called
+
+
+def test_iter_workitems_stops_without_cursor(client, api):
+    api.get("/workitems/mine").respond(
+        json={"workitems": [workitem("TF-1")], "pagination": {"hasMore": True}}  # no nextCursor
+    )
+    assert [w.ref for w in client.iter_workitems()] == ["TF-1"]

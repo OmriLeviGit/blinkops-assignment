@@ -125,6 +125,31 @@ def test_update_rejects_bad_stage(svc, api):
         svc.update_ticket("TF-5", stage="done")
 
 
+def test_update_rejects_empty_title(svc, api):
+    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    put = api.put("/workitem/TF-5")
+    with pytest.raises(ValidationError, match="title must not be empty"):
+        svc.update_ticket("TF-5", title="  ")
+    assert not put.called
+
+
+def test_update_clears_description_and_replaces_dependencies(svc, api):
+    api.get("/workitem/TF-5").respond(
+        json={"workitem": workitem("TF-5", description="old", dependsOn=["TF-1", "TF-2"])}
+    )
+    put = api.put("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    svc.update_ticket("TF-5", description="", depends_on=["3"], remove_deps=["tf-9"])
+    assert body(put)["description"] is None
+    assert body(put)["dependsOn"] == ["TF-3"]
+
+
+def test_update_remove_dependency_is_case_insensitive(svc, api):
+    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5", dependsOn=["TF-1", "TF-2"])})
+    put = api.put("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    svc.update_ticket("TF-5", remove_deps=["tf-2"])
+    assert body(put)["dependsOn"] == ["TF-1"]
+
+
 # ------------------------------------------------------------------ create
 
 
@@ -143,6 +168,22 @@ def test_create_builds_payload(svc, api):
 def test_create_requires_title(svc):
     with pytest.raises(ValidationError):
         svc.create_ticket("   ")
+
+
+def test_create_drops_empty_fields_and_blank_description(svc, api):
+    post = api.post("/workitem/publish").respond(json={"workitem": workitem("TF-9")})
+    fields = api.get("/custom-fields")
+    svc.create_ticket("New", description="   ", fields={"priority": ""})
+    assert body(post) == {"title": "New", "description": None, "dependsOn": None}
+    assert not fields.called  # nothing to validate
+
+
+def test_create_rejects_unknown_field_before_posting(svc, api):
+    api.get("/custom-fields").respond(json={"customFields": []})
+    post = api.post("/workitem/publish")
+    with pytest.raises(ValidationError, match="no custom fields defined"):
+        svc.create_ticket("New", fields={"priority": "high"})
+    assert not post.called
 
 
 # ------------------------------------------------------------------ listing
@@ -296,3 +337,51 @@ def test_add_field_validates_name_and_defaults_label(svc, api):
         svc.add_field("bad name")
     svc.add_field("due_date")
     assert body(post) == {"name": "due_date", "label": "Due Date"}
+
+
+def test_relabel_rejects_empty_label(svc, api):
+    route = api.get("/custom-fields")
+    with pytest.raises(ValidationError, match="label must not be empty"):
+        svc.relabel_field("priority", " ")
+    assert not route.called
+
+
+def test_relabel_and_delete_by_id(svc, api):
+    api.get("/custom-fields").respond(json=FIELDS)
+    api.put("/custom-fields/f1").respond(json={"customField": {"id": "f1", "name": "priority", "label": "P"}})
+    deleted = api.delete("/custom-fields/f1").respond(json={})
+    svc.relabel_field("f1", "P")
+    assert svc.delete_field("f1").name == "priority"
+    assert deleted.called
+
+
+def test_field_list_is_cached_until_changed(svc, api):
+    route = api.get("/custom-fields").respond(json=FIELDS)
+    api.post("/custom-fields").respond(json={"customField": {"id": "f2", "name": "team", "label": "Team"}})
+    svc.list_fields()
+    svc.list_fields()
+    assert route.call_count == 1
+    svc.add_field("team")
+    svc.list_fields()
+    assert route.call_count == 2
+
+
+def test_delete_ticket_normalizes_ref(svc, api):
+    route = api.delete("/workitem/TF-4").respond(json={})
+    svc.delete_ticket(" 4 ")
+    assert route.called
+
+
+def test_list_rejects_bad_limit_and_stage_before_requesting(svc, api):
+    route = api.get("/workitems/mine")
+    with pytest.raises(ValidationError):
+        svc.list_tickets(page=1, limit=0)
+    with pytest.raises(ValidationError):
+        svc.list_tickets(stage="done")
+    assert not route.called
+
+
+def test_list_empty_account(svc, api):
+    api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {"hasMore": False}})
+    assert svc.list_tickets(page=1, limit=5).items == []
+    assert svc.list_tickets().items == []

@@ -33,15 +33,20 @@ paging (`list -i`) was driven through a real pseudo-terminal by sending the keys
 
 ## Findings
 
-1. **`create --stage <invalid>` creates the ticket and then fails.** Because the create
+1. ✅ *Fixed:* **`create --stage <invalid>` created the ticket and then failed.** Because the create
    endpoint has no stage, the stage is set by a second request, and it was only validated at
    that point. `tforge create "Bad stage" --stage done` printed "invalid stage" and exited 1,
-   but TF-628 had already been created as `open` (it shows up in 06-list).
-2. **Two tests fail when `FORCE_COLOR` is set.** The CLI tests check plain-text output, so they
-   fail if the environment forces ANSI colors (as some CI runners do). Plain `pytest` passes.
+   but TF-628 had already been created as `open` (it shows up in 06-list). The stage is now
+   validated before anything is sent.
+2. ✅ *Fixed:* **Two tests failed when `FORCE_COLOR` was set.** The CLI tests check plain-text output, so they
+   failed if the environment forced ANSI colors (as some CI runners do). Plain `pytest` passed.
 3. Minor: an invalid ref such as `tforge show abc` goes to the server and comes back as
    "workitem ABC does not exist", rather than being rejected locally as a malformed ref.
 4. Minor: in error messages, rich highlights things automatically, so `custom field(s)` and
    the numbers in refs come out colored.
 5. Minor: the panel shown after `create` has no **Owner** row, while `update` and `show` do,
    because the create response doesn't include the owner.
+6. ✅ *Fixed, found while adding tests:* **the arrow keys did nothing in `list -i`.** Every key was
+   lowercased, which turned the right-arrow escape sequence `\x1b[C` into `\x1b[c`, so it
+   never matched. This was confirmed in a real terminal against the live API: → redrew page 1.
+   Now only single-character keys are lowercased.
