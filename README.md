@@ -1,35 +1,79 @@
 # tforge — TicketForge CLI
 
 A command line client for [TicketForge](https://integrations-assignment-ticketforge.vercel.app),
-a lightweight ticketing tool with no public API. The API was reverse-engineered
-from the web app; the findings are documented in [docs/API.md](docs/API.md).
+built for the Blink Ops Integration Developer take-home. TicketForge has no public API, so it
+was reverse-engineered from the web app.
+
+## For the reviewer
+
+This part is for whoever is reviewing the assignment. The [user guide](#user-guide) is below the line.
+
+### AI disclosure
+
+
+
+### Documentation and evidence
+
+| | |
+|---|---|
+| [docs/API.md](docs/API.md) | The reverse-engineered API: how it was discovered, endpoints, payloads, errors, rate limits, quirks |
+| [docs/CLI.md](docs/CLI.md) | Every command and flag with examples, generated from the code |
+| [docs/demo.md](docs/demo.md) | **Evidence 1:** a scripted run against the live API on a freshly registered account, covering every command and the error cases. The output is captured verbatim and reproducible |
+| [docs/evidence/](docs/evidence/README.md) | **Evidence 2:** a manual walkthrough from a fresh `git clone`, following this README exactly. Each step has a text transcript and a colored screenshot, plus the findings (one bug, since fixed) |
+
+The test suite (`pytest`, mocked HTTP, 95% coverage floor) covers the client, the services and every command.
+
+### Requirements
+
+| Requirement | Where |
+|---|---|
+| Setup step | `tforge setup`, which verifies the credentials before saving them |
+| Create, list, update | `tforge create`, `list`, `update` |
+| README, evidence | This file; [docs/demo.md](docs/demo.md), [docs/evidence/](docs/evidence/README.md) |
+| Bonus | Pagination (`--page`/`--limit`, `--all`, interactive `-i`), rate-limit handling, extra commands (`show`, `delete`, `fields`, `register`, `status`), colored output, tests |
+
+### Key decisions
+
+- **Reverse engineering:** the endpoints came from the web app's JavaScript bundles. Two response
+  headers then exposed more: `x-matched-path` shows which routes exist, and `OPTIONS` lists the
+  methods each one accepts. That revealed a `DELETE` endpoint the UI never uses. Every behavior
+  was confirmed live.
+- **Stack:** Python with Typer (commands and generated `--help`/docs), httpx (HTTP, easy to mock)
+  and rich (tables, colors, the pager). The layers are `cli` → `services` → `client`, so the
+  API's quirks are handled below the commands.
+- **Safe updates:** the API's `PUT` replaces the whole ticket and wipes fields you leave out.
+  The CLI fetches the ticket, merges your changes, and sends it all back.
+- **Errors:** the API returns 400 for almost everything, so errors are mapped by its `err` code.
+  Inputs that can be checked locally are validated before anything is sent.
+- **Rate limits:** the client waits when the quota runs out. It retries 429s (using
+  `Retry-After`, then the reset header, then backoff), but retries other failures only for
+  requests that are safe to repeat, so `create` never makes duplicates.
+- **Pagination:** the API gives 5 tickets per request with no offset. Page numbers are built
+  on its cursor, and the interactive browser loads lazily and caches what it has seen.
+
+---
+
+## User guide
+
+- [Installation](#installation)
+- [Setup](#setup)
+- [Usage](#usage): [commands](#commands) · [list](#list) · [create and update](#create-and-update) · [other commands](#other-commands) · [exit codes](#exit-codes)
+- [Development](#development)
+- [Assumptions and limitations](#assumptions-and-limitations)
 
 ```
 $ tforge list -n 3
-┏━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
-┃ Ref    ┃ Stage  ┃ Title             ┃ Description          ┃ Updated          ┃
-┡━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
-│ TF-594 │ closed │ Smoke test ticket │ created from the CLI │ 2026-10-28 14:14 │
-│ TF-593 │ open   │ test1             │ test2                │ 2026-10-28 14:08 │
-│ TF-592 │ open   │ Ticket 5          │                      │ 2026-10-28 14:06 │
-└────────┴────────┴───────────────────┴──────────────────────┴──────────────────┘
+┏━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Ref    ┃ Stage       ┃ Title                   ┃ Description               ┃ Updated          ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ TF-611 │ open        │ Release v1.0            │ Blocked on CI and         │ 2026-10-28 14:24 │
+│        │             │                         │ security work             │                  │
+│ TF-610 │ in progress │ Add login rate limiting │                           │ 2026-10-28 14:24 │
+│ TF-609 │ review      │ Set up CI pipeline      │ GitHub Actions running    │ 2026-10-28 14:24 │
+│        │             │                         │ lint and tests            │                  │
+└────────┴─────────────┴─────────────────────────┴───────────────────────────┴──────────────────┘
 Page 1 · tickets 1–3 · next: tforge list --page 2 --limit 3
 ```
-
-## Features
-
-- **Setup** step that verifies credentials before saving them
-- **Create, list, update** tickets, plus **show** and **delete**
-- **Safe partial updates**: only the options you pass are changed (the raw API
-  silently wipes fields you leave out of an update)
-- **Pagination**: `--page`/`--limit`, `--all`, or an interactive browser (`-i`) with next/prev keys
-- **Stage filter** (`--stage`), dependencies (`--add-dep`, `--remove-dep`, ...) and
-  **custom fields** (`--field priority=high`, `tforge fields ...`)
-- **Rate-limit handling**: waits for the window to reset when the quota is used
-  up, and retries with backoff on 429 and transient errors
-- Colored tables, a `--json` flag on every read/write command for scripting, and
-  meaningful exit codes
-- 141 tests with mocked HTTP, 99% line coverage
 
 ## Installation
 
@@ -38,248 +82,110 @@ Requires Python 3.10+.
 ```bash
 git clone https://github.com/OmriLeviGit/blinkops-assignment.git
 cd blinkops-assignment
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .            # or: pip install -e '.[dev]' to run the tests
-tforge --help
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .            # or '.[dev]' to run the tests
 ```
 
-### Tested on
-
-- Windows 11 Pro (build 26300) with WSL2 2.5.9, Ubuntu 24.04.2 LTS, kernel 6.6.87.2
-- Python 3.12.3 in a venv, bash
-- Starting from a fresh `git clone` and following the steps above: 54/54 tests passed, and every
-  command in this README was run against the live API (2026-10-28). The recorded output and
-  screenshots are in [docs/evidence/](docs/evidence/README.md).
-
-It's plain Python with no native dependencies, so it should also work on Linux and macOS
-(not tested). The interactive browser (`list -i`) needs a real terminal (TTY). In the WSL2
-terminal, single-key navigation works without pressing Enter.
+Tested on Ubuntu 24.04 under WSL2 (Windows 11) with Python 3.12, starting from a fresh clone. It
+has no native dependencies, so Linux and macOS should work too (not tested).
 
 ## Setup
 
-Use an existing TicketForge account, or create one with `tforge register`.
-
 ```bash
-tforge setup
-# TicketForge URL [https://integrations-assignment-ticketforge.vercel.app]:
-# Username: alice
-# Password:
-# ✓ Connected as alice. Config saved to ~/.config/ticketforge/config.json
+tforge setup                 # prompts for URL, username and password, verifies them, saves the config
+tforge register              # or create a new account first
+tforge status                # show the config, check the credentials, show the rate-limit quota
 ```
 
-`setup` checks the credentials against the API before saving them. You can also
-pass everything non-interactively:
-
-```bash
-tforge setup -u alice -p 's3cret' --base-url https://integrations-assignment-ticketforge.vercel.app
-```
-
-Configuration is resolved in this order: **environment variables → config file → defaults**.
-
-| Variable | Purpose |
-|---|---|
-| `TFORGE_USERNAME`, `TFORGE_PASSWORD` | Credentials (handy for CI; no config file needed) |
-| `TFORGE_BASE_URL` | TicketForge app URL |
-| `TFORGE_CONFIG` | Alternative config file path |
-
-`tforge status` shows the active config, checks the credentials, and reports the remaining rate-limit quota.
+The config is saved to `~/.config/ticketforge/config.json` (mode `0600`). Environment variables
+override it: `TFORGE_USERNAME`, `TFORGE_PASSWORD`, `TFORGE_BASE_URL`, `TFORGE_CONFIG` (config path).
 
 ## Usage
 
-### Command reference
+### Commands
 
-| Command | What it does | Main flags |
+| Command | Purpose | Main flags |
 |---|---|---|
-| `setup` | Configure and verify the connection | `-u/--username`, `-p/--password`, `--base-url` |
-| `register` | Create an account (and save it as the config) | `-u`, `-p`, `--base-url`, `--no-save` |
-| `status` | Show config, check credentials, show rate-limit quota | |
-| `list` | List tickets, newest first | `-p/--page`, `-n/--limit`, `-a/--all`, `-i/--interactive`, `-s/--stage`, `--json` |
-| `show REF` | Show one ticket in full | `--json` |
-| `create [TITLE]` | Create a ticket | `-d/--description`, `-s/--stage`, `--dep/--depends-on`, `-f/--field`, `--json` |
-| `update REF` | Change only the given fields | `-t/--title`, `-d`, `-s`, `--depends-on`, `--add-dep`, `--remove-dep`, `--clear-deps`, `-f`, `--json` |
+| `list` | List tickets, newest first | `-p/--page`, `-n/--limit`, `-a/--all`, `-i/--interactive`, `-s/--stage` |
+| `show REF` | Show one ticket in full | |
+| `create [TITLE]` | Create a ticket | `-d/--description`, `-s/--stage`, `--dep`, `-f/--field` |
+| `update REF` | Change only the given fields | `-t`, `-d`, `-s`, `--add-dep`, `--remove-dep`, `--depends-on`, `--clear-deps`, `-f` |
 | `delete REF` | Delete a ticket | `-y/--yes` |
-| `fields list\|add\|relabel\|delete` | Manage custom field definitions | `-l/--label`, `-y`, `--json` |
+| `fields list\|add\|relabel\|delete` | Manage custom fields | `-l/--label`, `-y` |
+| `setup`, `register`, `status` | Configuration (see [Setup](#setup)) | |
 
-**Every flag, with defaults and examples:** run `tforge <command> --help`, or see
-[docs/CLI.md](docs/CLI.md). That reference is generated from the code, so it
-always matches the installed version.
-
-### Create
-
-```bash
-tforge create "Fix login redirect"
-tforge create "Write release notes" -d "Cover the new CLI" --stage in_progress
-tforge create "Ship v2" --dep TF-12 --dep TF-13 --field priority=high
-```
-
-If you leave out the title, you'll be prompted for it.
+Most commands accept `--json`. Refs can be written as `TF-12` or just `12`. For every flag, see
+`tforge <command> --help` or [docs/CLI.md](docs/CLI.md).
 
 ### List
 
 ```bash
-tforge list                        # page 1, 10 tickets per page
-tforge list --page 2 --limit 5     # any page, any page size
-tforge list --all                  # every ticket, no paging
-tforge list --stage in_progress    # filter by stage (paging applies to the filtered list)
-tforge list --json                 # machine-readable
+tforge list                        # page 1, 10 per page
+tforge list -p 2 -n 5              # page 2, 5 per page
+tforge list -a                     # everything
+tforge list -s in_progress         # filter by stage (open, in_progress, review, closed)
+tforge list -i                     # interactive: n/→ next, p/← previous, q quit
 ```
 
-The footer shows where you are and the command for the next page:
+The interactive browser loads lazily: it fetches only when you move onto a new page, and going
+back is free. The page total (`Page 3/3`) appears once the end of the list is reached, because
+the API has no count endpoint.
 
-```
-Page 2 · tickets 6–10 · next: tforge list --page 3 --limit 5
-```
-
-#### Interactive browsing
+### Create and update
 
 ```bash
-tforge list --interactive          # or -i; combine with --limit and --stage
+tforge create "Ship v2" -d "Release" -s in_progress --dep TF-12 -f priority=high
+tforge update TF-12 -s review                  # only the stage changes
+tforge update TF-12 -t "New title" -d ''       # '' clears the description
+tforge update TF-12 --add-dep TF-3 --remove-dep TF-4
+tforge update TF-12 -f priority=low -f team=   # set one field, unset another
 ```
 
-```
-Page 1 · 10 loaded · [n]ext  [q]uit >
-Page 2 · 25 loaded · [n]ext  [p]rev  [q]uit >
-Page 3/3 · 27 tickets · [p]rev  [q]uit >
-```
-
-Single keypresses: `n`/space/→ for next, `p`/← for previous, `q`/Esc to quit.
-
-Tickets are **loaded lazily**: the browser fetches from the API only when you
-move onto a page it hasn't seen, and keeps everything loaded so going back is
-instant and free. The API has no count endpoint, so the page total (`3/3`)
-appears once the end of the list is reached. Opening the browser costs one or
-two requests no matter how many tickets you have.
-
-### Show
+### Other commands
 
 ```bash
 tforge show TF-12
-tforge show 12          # bare numbers are treated as TF-<n>
-```
-
-### Update
-
-Only the options you pass are changed:
-
-```bash
-tforge update TF-12 --stage review
-tforge update TF-12 --title "New title" -d "New description"
-tforge update TF-12 -d ''                     # clear the description
-tforge update TF-12 --add-dep TF-3 --remove-dep TF-4
-tforge update TF-12 --depends-on TF-5         # replace all dependencies
-tforge update TF-12 --clear-deps
-tforge update TF-12 -f priority=low -f team=  # set one field, unset another
-```
-
-Stages: `open`, `in_progress`, `review`, `closed` (`in-progress` and `"In Progress"` work too).
-
-### Delete
-
-```bash
-tforge delete TF-12        # asks for confirmation
-tforge delete TF-12 --yes
-```
-
-### Custom fields
-
-Custom fields are per-user, text-valued attributes such as priority or team.
-
-```bash
-tforge fields list
-tforge fields add priority --label Priority
-tforge fields relabel priority "Urgency"
-tforge fields delete priority          # asks first (--yes to skip); also removes its values from all tickets
+tforge delete TF-12                            # asks for confirmation (-y to skip)
+tforge fields add priority -l Priority         # custom fields are per-user text values
+tforge fields relabel priority Urgency
 ```
 
 ### Exit codes
 
-| Code | Meaning |
-|---|---|
-| 0 | Success |
-| 1 | API or validation error (e.g. ticket not found, invalid stage) |
-| 2 | Not configured / bad credentials |
+`0` success · `1` API or validation error · `2` not configured or bad credentials
 
-## Project layout
-
-```
-src/ticketforge_cli/
-├── cli.py        # Typer commands (thin: parse args, call services, render)
-├── views.py      # rich tables/panels, colors, JSON output
-├── services.py   # ticket logic: merge-before-update, filtering, field validation
-├── client.py     # HTTP: auth, retries, rate limits, error mapping, cursor walking
-├── models.py     # lenient dataclasses (tolerate missing/extra fields)
-├── errors.py     # exception hierarchy, mapped from the API's `err` codes
-└── config.py     # config file + env overrides
-docs/API.md       # reverse-engineered API reference
-docs/CLI.md       # full command/flag reference (generated)
-docs/demo.md      # recorded run against the live API
-docs/evidence/    # fresh-clone walkthrough: outputs + screenshots
-tests/            # pytest + respx (mocked HTTP)
-scripts/gen_cli_docs.py  # regenerates docs/CLI.md
-```
-
-## Running the tests
+## Development
 
 ```bash
 pip install -e '.[dev]'
-pytest
-pytest --cov                # with a coverage report; fails below 95%
+pytest --cov                       # fails below 95% coverage
+python scripts/gen_cli_docs.py     # regenerate docs/CLI.md after changing commands
 ```
 
-The tests cover error mapping, retries and 429/`Retry-After` handling (including
-HTTP-date values and the 60s cap), waiting for the quota to reset, page-number paging over
-the cursor API, lazy interactive paging and its keys, merge-before-update, client-side
-filtering, config precedence and file permissions, and every CLI command, including
-prompts, confirmations, `--json` output and exit codes. The suite doesn't depend on the
-shell it runs in: it passes with `FORCE_COLOR`, `NO_COLOR` or any terminal width. A docs test also fails if
-[docs/CLI.md](docs/CLI.md) no longer matches the code. After changing any
-command or flag, regenerate it:
+A test fails if [docs/CLI.md](docs/CLI.md) falls out of sync with the code.
 
-```bash
-python scripts/gen_cli_docs.py
 ```
-
-## Design notes
-
-- **Updates are GET → merge → PUT.** TicketForge's `PUT` is a full replace with
-  inconsistent rules: an omitted `description` or `customFields` is wiped, while an
-  omitted `dependsOn` is kept. The service layer always fetches the ticket and
-  sends a complete body, so `tforge update TF-1 --stage review` never loses data.
-- **Errors are mapped by the `err` code, not the HTTP status**, because the API
-  returns 400 for not-found, forbidden and validation errors alike.
-- **Retries are method-aware.** A 429 is retried for any method, since the request
-  was rejected before it was processed. Other transient errors are retried only
-  for idempotent methods, so a flaky `create` can't produce duplicate tickets.
-- **Rate limits.** The client tracks `x-ratelimit-remaining`/`x-ratelimit-reset`
-  and sleeps until the reset when the quota hits 0. On a 429 it honors `Retry-After`,
-  then falls back to the reset header, then to exponential backoff with jitter (at
-  most 3 retries, with any single wait capped at 60s).
-- **Custom fields are validated locally** before sending, so a typo produces a
-  helpful message listing the available fields.
+src/ticketforge_cli/
+├── cli.py        # commands: parse args, call services, render
+├── views.py      # tables, panels, colors, JSON
+├── services.py   # ticket logic: safe updates, paging, filtering, validation
+├── client.py     # HTTP: auth, retries, rate limits, error mapping
+├── models.py     # lenient dataclasses
+├── errors.py     # exceptions, mapped from the API's error codes
+└── config.py     # config file + env overrides
+```
 
 ## Assumptions and limitations
 
-- **Credentials are stored in plaintext** in `~/.config/ticketforge/config.json`
-  (file mode `0600`). The API only supports Basic auth, so there is no token to store
-  instead. Use the environment variables if you'd rather not write a file.
-- **The API only supports cursor paging, at most 5 tickets per request.**
-  There is no offset or page parameter (`page`, `offset` and `skip` are ignored),
-  and cursors must point at a real ticket, so `--page N` walks the cursor from
-  the start: page N of size L costs about `N×L/5` requests against the 50/min
-  rate limit. That's fine for personal ticket lists, but would need server
-  support to scale to very large ones. The interactive browser avoids paying
-  this up front by loading pages only as you move forward.
-- **Stage filtering is client-side**, since the server ignores filter parameters.
-  The filter is applied before paging, which means scanning tickets until enough
-  matches are found.
-- **The list endpoint omits dependencies and custom fields**, so they appear
-  in `show` but not in the `list` table. Fetching each ticket would cost one request per row.
-- **A 429 was never observed live.** The rate limiter appears to be per serverless
-  instance (see [docs/API.md](docs/API.md#rate-limiting)), so 429 handling is built
-  on the headers the API sends and on standard conventions, and verified with mocked tests.
-- **Ticket refs can be reused** after a delete (the server assigns `max + 1`).
-- **No comments, assignees or search**: these endpoints don't exist in the API.
-- `create --stage` makes two requests (create, then update), because the create
-  endpoint always starts tickets as `open`.
-- Custom fields can be relabelled but not renamed, because the API ignores name changes.
+- **The password is stored in plaintext** (in a `0600` file), because the API only supports Basic
+  auth. Use the environment variables to avoid writing it to disk.
+- **Deep pages cost requests.** The API returns 5 tickets per request with no offset, so
+  `--page N` steps through every earlier page (about N×limit/5 requests, against 50 per minute).
+- **Filtering is client-side**, because the server ignores filter parameters.
+- **`list` doesn't show dependencies or custom fields**, because the list endpoint doesn't return
+  them. `show` does.
+- **429 handling is tested with mocks only.** The live rate limiter appears to count per server
+  instance, and it never rejected a request (see [docs/API.md](docs/API.md#rate-limiting)).
+- **Refs can be reused** after a delete (the server assigns `max + 1`).
+- **No comments, assignees or search**, because the API doesn't have them. Custom fields can be
+  relabelled but not renamed.
