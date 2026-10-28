@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -98,13 +99,21 @@ def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
 def save_config(cfg: Config, path: Path | None = None) -> Path:
     path = path or config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    # Create the file with 0600 from the start so the password is never world-readable.
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
-        json.dump(
-            {"base_url": cfg.base_url, "username": cfg.username, "password": cfg.password},
-            fh,
-            indent=2,
-        )
-    os.chmod(path, 0o600)
+    # Write a temp file and rename it over the config, so an interrupted save (Ctrl-C, full
+    # disk) leaves the old config intact. mkstemp creates it 0600: the password is never
+    # world-readable.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(
+                {"base_url": cfg.base_url, "username": cfg.username, "password": cfg.password},
+                fh,
+                indent=2,
+            )
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
     return path

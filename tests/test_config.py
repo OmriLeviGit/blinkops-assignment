@@ -125,3 +125,17 @@ def test_invalid_base_url_names_its_source(tmp_path, monkeypatch, url):
 
 def test_validate_base_url_strips_trailing_slash():
     assert validate_base_url("https://tf.test/") == "https://tf.test"
+
+
+def test_interrupted_save_keeps_the_old_config(tmp_path, monkeypatch):
+    path = tmp_path / "c.json"
+    save_config(Config(base_url="https://old.test", username="old", password="pw"), path)
+
+    def boom(*args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(json, "dump", boom)
+    with pytest.raises(KeyboardInterrupt):
+        save_config(Config(username="new", password="pw"), path)
+    assert load_config(path).username == "old"
+    assert [p.name for p in tmp_path.iterdir()] == ["c.json"]

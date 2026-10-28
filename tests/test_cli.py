@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 from ticketforge_cli import __version__
 from ticketforge_cli.cli import app
+from ticketforge_cli.client import TicketForgeClient
 
 from .conftest import BASE, workitem
 
@@ -692,3 +693,39 @@ def test_setup_repairs_a_malformed_config(tmp_path, monkeypatch, api):
     result = runner.invoke(app, ["setup", "--base-url", BASE, "-u", "alice", "-p", "pw"])
     assert result.exit_code == 0, result.output
     assert json.loads(path.read_text())["username"] == "alice"
+
+
+def _interrupt(*args, **kwargs):
+    raise KeyboardInterrupt
+
+
+def test_ctrl_c_mid_request_exits_130(configured, monkeypatch):
+    monkeypatch.setattr(TicketForgeClient, "get_workitem", _interrupt)
+    result = runner.invoke(app, ["show", "1"])
+    assert result.exit_code == 130
+    assert "Interrupted" in result.output
+
+
+def test_service_client_is_closed_after_the_command(configured, monkeypatch):
+    from ticketforge_cli import cli
+
+    closed = []
+    monkeypatch.setattr(TicketForgeClient, "close", lambda self: closed.append(self))
+    monkeypatch.setattr(TicketForgeClient, "get_workitem", _interrupt)
+    runner.invoke(app, ["show", "1"])
+    assert len(closed) == 1
+    assert not cli._open_clients
+
+
+@pytest.mark.parametrize("interrupted", [True, False])
+def test_create_reports_ticket_when_stage_update_fails(configured, api, monkeypatch, interrupted):
+    api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    api.get("/workitem/TF-3").respond(json={"workitem": workitem("TF-3")})
+    if interrupted:
+        monkeypatch.setattr(TicketForgeClient, "update_workitem", _interrupt)
+    else:
+        api.put("/workitem/TF-3").respond(400, json={"err": "invalid_input", "message": "nope"})
+    result = runner.invoke(app, ["create", "Hello", "-s", "review"])
+    assert result.exit_code == (130 if interrupted else 1)
+    assert "Created TF-3, but its stage wasn't set" in result.output
+    assert "tforge update TF-3 -s review" in result.output

@@ -66,6 +66,10 @@ def main(
     """Manage TicketForge tickets from the terminal."""
 
 
+# Clients opened by get_service(), closed by handle_errors when the command ends.
+_open_clients: list[TicketForgeClient] = []
+
+
 def handle_errors(func: F) -> F:
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -80,6 +84,13 @@ def handle_errors(func: F) -> F:
         except TicketForgeError as exc:
             views.error(exc.message)
             raise typer.Exit(1) from None
+        except KeyboardInterrupt:
+            views.err_console.print()  # the cursor may be mid-line (prompt, spinner)
+            views.error("Interrupted")
+            raise typer.Exit(130) from None
+        finally:
+            while _open_clients:
+                _open_clients.pop().close()
 
     return wrapper  # type: ignore[return-value]
 
@@ -98,7 +109,9 @@ def get_service() -> TicketService:
     cfg = load_config()
     if not cfg.is_complete:
         raise ConfigError("TicketForge is not configured")
-    return TicketService(make_client(cfg))
+    client = make_client(cfg)
+    _open_clients.append(client)
+    return TicketService(client)
 
 
 # ------------------------------------------------------------------ setup
@@ -443,7 +456,14 @@ def create(
     )
     if stage and stage != "open":
         # The create endpoint has no stage; new tickets always start as "open".
-        ticket = svc.update_ticket(ticket.ref, stage=stage)
+        try:
+            ticket = svc.update_ticket(ticket.ref, stage=stage)
+        except (TicketForgeError, KeyboardInterrupt):
+            views.info(
+                f"Created {ticket.ref}, but its stage wasn't set."
+                f" Run `tforge update {ticket.ref} -s {stage}`."
+            )
+            raise
     if as_json:
         views.print_json(ticket)
         return
