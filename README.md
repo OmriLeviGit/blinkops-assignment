@@ -1,5 +1,7 @@
 # tforge — TicketForge CLI
 
+[![CI](https://github.com/OmriLeviGit/blinkops-assignment/actions/workflows/ci.yml/badge.svg)](https://github.com/OmriLeviGit/blinkops-assignment/actions/workflows/ci.yml)
+
 A command line client for [TicketForge](https://integrations-assignment-ticketforge.vercel.app),
 built for the Blink Ops Integration Developer take-home. TicketForge has no public API, so it
 was reverse-engineered from the web app.
@@ -24,7 +26,9 @@ reviewed the output, and verified the results against the live API. Details in
 | [docs/demo.md](docs/demo.md) | **Evidence 1:** a scripted run against the live API on a freshly registered account, covering every command and the error cases. The output is captured verbatim and reproducible |
 | [docs/evidence/](docs/evidence/README.md) | **Evidence 2:** a manual walkthrough from a fresh `git clone`, following this README exactly. Each step has a text transcript and a colored screenshot, plus the findings (one bug, since fixed) |
 
-The test suite (`pytest`, mocked HTTP, 95% coverage floor) covers the client, the services and every command.
+The test suite (`pytest`, mocked HTTP, 95% coverage floor) covers the client, the services and
+every command. [CI](.github/workflows/ci.yml) runs it with `ruff` (lint and format) and strict
+`mypy` on Python 3.10–3.13 on every push.
 
 ### Requirements
 
@@ -162,6 +166,8 @@ tforge fields relabel priority Urgency
 ```bash
 pip install -e '.[dev]'
 pytest --cov                       # fails below 95% coverage
+ruff check . && ruff format --check .
+mypy                               # strict
 python scripts/gen_cli_docs.py     # regenerate docs/CLI.md after changing commands
 ```
 
