@@ -29,7 +29,7 @@ Page 1 · tickets 1–3 · next: tforge list --page 2 --limit 3
   up, and retries with backoff on 429 and transient errors
 - Colored tables, a `--json` flag on every read/write command for scripting, and
   meaningful exit codes
-- 59 tests with mocked HTTP
+- 61 tests with mocked HTTP
 
 ## Installation
 
@@ -86,6 +86,24 @@ Configuration is resolved in this order: **environment variables → config file
 `tforge status` shows the active config, checks the credentials, and reports the remaining rate-limit quota.
 
 ## Usage
+
+### Command reference
+
+| Command | What it does | Main flags |
+|---|---|---|
+| `setup` | Configure and verify the connection | `-u/--username`, `-p/--password`, `--base-url` |
+| `register` | Create an account (and save it as the config) | `-u`, `-p`, `--base-url`, `--no-save` |
+| `status` | Show config, check credentials, show rate-limit quota | |
+| `list` | List tickets, newest first | `-p/--page`, `-n/--limit`, `-a/--all`, `-i/--interactive`, `-s/--stage`, `--json` |
+| `show REF` | Show one ticket in full | `--json` |
+| `create [TITLE]` | Create a ticket | `-d/--description`, `-s/--stage`, `--dep/--depends-on`, `-f/--field`, `--json` |
+| `update REF` | Change only the given fields | `-t/--title`, `-d`, `-s`, `--depends-on`, `--add-dep`, `--remove-dep`, `--clear-deps`, `-f`, `--json` |
+| `delete REF` | Delete a ticket | `-y/--yes` |
+| `fields list\|add\|relabel\|delete` | Manage custom field definitions | `-l/--label`, `-y`, `--json` |
+
+**Every flag, with defaults and examples:** run `tforge <command> --help`, or see
+[docs/CLI.md](docs/CLI.md). That reference is generated from the code, so it
+always matches the installed version.
 
 ### Create
 
@@ -194,9 +212,11 @@ src/ticketforge_cli/
 ├── errors.py     # exception hierarchy, mapped from the API's `err` codes
 └── config.py     # config file + env overrides
 docs/API.md       # reverse-engineered API reference
+docs/CLI.md       # full command/flag reference (generated)
 docs/demo.md      # recorded run against the live API
 docs/evidence/    # fresh-clone walkthrough: outputs + screenshots
 tests/            # pytest + respx (mocked HTTP)
+scripts/gen_cli_docs.py  # regenerates docs/CLI.md
 ```
 
 ## Running the tests
@@ -208,7 +228,13 @@ pytest
 
 The tests cover error mapping, retries and 429/`Retry-After` handling, waiting
 for the quota to reset, page-number paging over the cursor API, merge-before-update, client-side
-filtering, config precedence, and the main CLI flows.
+filtering, config precedence, and the main CLI flows. A docs test also fails if
+[docs/CLI.md](docs/CLI.md) no longer matches the code. After changing any
+command or flag, regenerate it:
+
+```bash
+python scripts/gen_cli_docs.py
+```
 
 ## Design notes
 

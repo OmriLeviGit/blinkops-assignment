@@ -29,6 +29,15 @@ F = TypeVar("F", bound=Callable[..., Any])
 JsonOpt = Annotated[bool, typer.Option("--json", help="Print raw JSON instead of tables.")]
 
 
+def examples(*lines: str) -> str:
+    """Build an --help epilog. `#` starts a dimmed comment."""
+    rendered = []
+    for line in lines:
+        cmd, _, note = line.partition("#")
+        rendered.append(f"{cmd.rstrip()}  [dim]# {note.strip()}[/]" if note else cmd.rstrip())
+    return "[bold]Examples[/]\n\n" + "\n".join(rendered)
+
+
 def handle_errors(func: F) -> F:
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -67,11 +76,11 @@ def get_service() -> TicketService:
 # ------------------------------------------------------------------ setup
 
 
-@app.command()
+@app.command(epilog=examples('tforge setup  # prompts for URL, username and password', "tforge setup -u alice -p 's3cret'", 'TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars instead of a config file'))
 @handle_errors
 def setup(
-    username: Annotated[str | None, typer.Option("--username", "-u")] = None,
-    password: Annotated[str | None, typer.Option("--password", "-p", help="Prompted if omitted.")] = None,
+    username: Annotated[str | None, typer.Option("--username", "-u", help="Prompted if omitted.")] = None,
+    password: Annotated[str | None, typer.Option("--password", "-p", help="Prompted (hidden) if omitted.")] = None,
     base_url: Annotated[str | None, typer.Option("--base-url", help="TicketForge app URL.")] = None,
 ) -> None:
     """Configure and verify the connection to TicketForge."""
@@ -87,12 +96,12 @@ def setup(
     views.success(f"Connected as [bold]{username}[/]. Config saved to {path}")
 
 
-@app.command()
+@app.command(epilog=examples('tforge register  # prompts, then saves the new credentials', 'tforge register -u alice --no-save'))
 @handle_errors
 def register(
-    username: Annotated[str | None, typer.Option("--username", "-u")] = None,
-    password: Annotated[str | None, typer.Option("--password", "-p")] = None,
-    base_url: Annotated[str | None, typer.Option("--base-url")] = None,
+    username: Annotated[str | None, typer.Option("--username", "-u", help="Prompted if omitted.")] = None,
+    password: Annotated[str | None, typer.Option("--password", "-p", help="Prompted (hidden, confirmed) if omitted.")] = None,
+    base_url: Annotated[str | None, typer.Option("--base-url", help="TicketForge app URL (default: configured URL).")] = None,
     save: Annotated[bool, typer.Option(help="Save the new credentials as the active config.")] = True,
 ) -> None:
     """Create a new TicketForge account."""
@@ -107,7 +116,7 @@ def register(
         views.success(f"Config saved to {path}")
 
 
-@app.command()
+@app.command(epilog=examples('tforge status'))
 @handle_errors
 def status() -> None:
     """Show the active configuration and check the connection."""
@@ -131,14 +140,14 @@ def status() -> None:
 # ------------------------------------------------------------------ tickets
 
 
-@app.command("list")
+@app.command("list", epilog=examples('tforge list  # page 1, 10 per page', 'tforge list -p 2 -n 5  # page 2, 5 per page', 'tforge list -a  # every ticket', 'tforge list -s in_progress  # filter by stage', 'tforge list -i  # browse with n/p/q', 'tforge list --json'))
 @handle_errors
 def list_tickets(
     page: Annotated[int, typer.Option("--page", "-p", min=1, help="Page number.")] = 1,
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, help="Tickets per page.")] = 10,
     all_: Annotated[bool, typer.Option("--all", "-a", help="Show every ticket, no paging.")] = False,
     interactive: Annotated[bool, typer.Option("--interactive", "-i", help="Browse pages with n/p/q.")] = False,
-    stage: Annotated[str | None, typer.Option("--stage", "-s", help="Filter by stage.")] = None,
+    stage: Annotated[str | None, typer.Option("--stage", "-s", help="Filter by stage: open | in_progress | review | closed.")] = None,
     as_json: JsonOpt = False,
 ) -> None:
     """List your tickets, newest first."""
@@ -232,7 +241,7 @@ def browse(
             page -= 1
 
 
-@app.command()
+@app.command(epilog=examples('tforge show TF-12', 'tforge show 12 --json  # bare numbers mean TF-<n>'))
 @handle_errors
 def show(ref: Annotated[str, typer.Argument(help="Ticket ref, e.g. TF-12 or 12.")], as_json: JsonOpt = False) -> None:
     """Show a single ticket in full."""
@@ -245,13 +254,13 @@ def show(ref: Annotated[str, typer.Argument(help="Ticket ref, e.g. TF-12 or 12."
     views.console.print(views.ticket_detail(ticket, labels))
 
 
-@app.command()
+@app.command(epilog=examples('tforge create "Fix login redirect"', 'tforge create "Write release notes" -d "Cover the new CLI" -s in_progress', 'tforge create "Ship v2" --dep TF-12 --dep TF-13 -f priority=high'))
 @handle_errors
 def create(
     title: Annotated[str | None, typer.Argument(help="Ticket title (prompted if omitted).")] = None,
-    description: Annotated[str | None, typer.Option("--description", "-d")] = None,
+    description: Annotated[str | None, typer.Option("--description", "-d", help="Ticket description.")] = None,
     stage: Annotated[str | None, typer.Option("--stage", "-s", help="Initial stage (default: open).")] = None,
-    depends_on: Annotated[list[str] | None, typer.Option("--depends-on", "--dep", help="Repeatable.")] = None,
+    depends_on: Annotated[list[str] | None, typer.Option("--depends-on", "--dep", help="Ref this ticket depends on. Repeatable.")] = None,
     field: Annotated[list[str] | None, typer.Option("--field", "-f", help="Custom field name=value. Repeatable.")] = None,
     as_json: JsonOpt = False,
 ) -> None:
@@ -275,11 +284,11 @@ def create(
     views.console.print(views.ticket_detail(ticket, labels))
 
 
-@app.command()
+@app.command(epilog=examples('tforge update TF-12 -s review', "tforge update TF-12 -t 'New title' -d ''  # '' clears the description", 'tforge update TF-12 --add-dep TF-3 --remove-dep TF-4', 'tforge update TF-12 --clear-deps', 'tforge update TF-12 -f priority=low -f team=  # set one field, unset another'))
 @handle_errors
 def update(
     ref: Annotated[str, typer.Argument(help="Ticket ref, e.g. TF-12 or 12.")],
-    title: Annotated[str | None, typer.Option("--title", "-t")] = None,
+    title: Annotated[str | None, typer.Option("--title", "-t", help="New title.")] = None,
     description: Annotated[str | None, typer.Option("--description", "-d", help="Pass '' to clear.")] = None,
     stage: Annotated[str | None, typer.Option("--stage", "-s", help="open | in_progress | review | closed")] = None,
     depends_on: Annotated[list[str] | None, typer.Option("--depends-on", help="Replace all dependencies. Repeatable.")] = None,
@@ -309,7 +318,7 @@ def update(
     views.console.print(views.ticket_detail(ticket, labels))
 
 
-@app.command()
+@app.command(epilog=examples('tforge delete TF-12', 'tforge delete TF-12 -y  # no confirmation'))
 @handle_errors
 def delete(
     ref: Annotated[str, typer.Argument(help="Ticket ref, e.g. TF-12 or 12.")],
@@ -327,7 +336,7 @@ def delete(
 # ------------------------------------------------------------ custom fields
 
 
-@fields_app.command("list")
+@fields_app.command("list", epilog=examples('tforge fields list', 'tforge fields list --json'))
 @handle_errors
 def fields_list(as_json: JsonOpt = False) -> None:
     """List custom field definitions."""
@@ -340,7 +349,7 @@ def fields_list(as_json: JsonOpt = False) -> None:
         views.console.print(views.fields_table(fields))
 
 
-@fields_app.command("add")
+@fields_app.command("add", epilog=examples("tforge fields add priority  # label defaults to 'Priority'", 'tforge fields add due_date -l "Due date"'))
 @handle_errors
 def fields_add(
     name: Annotated[str, typer.Argument(help="Letters, digits and underscores.")],
@@ -351,7 +360,7 @@ def fields_add(
     views.success(f"Added field [bold]{created.name}[/] ({created.label})")
 
 
-@fields_app.command("relabel")
+@fields_app.command("relabel", epilog=examples('tforge fields relabel priority Urgency'))
 @handle_errors
 def fields_relabel(
     name: Annotated[str, typer.Argument(help="Field name or id.")],
@@ -362,7 +371,7 @@ def fields_relabel(
     views.success(f"Field [bold]{updated.name}[/] is now labelled \"{updated.label}\"")
 
 
-@fields_app.command("delete")
+@fields_app.command("delete", epilog=examples('tforge fields delete priority', 'tforge fields delete priority -y  # no confirmation'))
 @handle_errors
 def fields_delete(
     name: Annotated[str, typer.Argument(help="Field name or id.")],
