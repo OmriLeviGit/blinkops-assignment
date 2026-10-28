@@ -26,6 +26,11 @@ app.add_typer(fields_app, name="fields")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
+SETUP_HINT = (
+    "Run `tforge setup`, or set TFORGE_USERNAME and TFORGE_PASSWORD in a .env file"
+    " (see .env.example)."
+)
+
 JsonOpt = Annotated[bool, typer.Option("--json", help="Print raw JSON instead of tables.")]
 
 
@@ -69,7 +74,7 @@ def handle_errors(func: F) -> F:
             views.error(exc.message, "Check your credentials with `tforge setup`.")
             raise typer.Exit(2) from None
         except ConfigError as exc:
-            views.error(exc.message, "Run `tforge setup` first.")
+            views.error(exc.message, SETUP_HINT)
             raise typer.Exit(2) from None
         except TicketForgeError as exc:
             views.error(exc.message)
@@ -165,14 +170,26 @@ def register(
         views.success(f"Config saved to {path}")
 
 
-@app.command(epilog=examples("tforge status"))
+def _source(cfg: Config, attr: str) -> str:
+    source = cfg.sources.get(attr)
+    return f" [dim](from {source})[/]" if source else ""
+
+
+@app.command(
+    epilog=examples(
+        "tforge status",
+        "cp .env.example .env && tforge status  # credentials from ./.env",
+    )
+)
 @handle_errors
 def status() -> None:
     """Show the active configuration and check the connection."""
     cfg = load_config()
     views.console.print(f"Config file: {config_path()}")
-    views.console.print(f"URL:         {cfg.base_url}")
-    views.console.print(f"Username:    {cfg.username or '[dim]not set[/]'}")
+    views.console.print(f"URL:         {cfg.base_url}{_source(cfg, 'base_url')}")
+    views.console.print(
+        f"Username:    {cfg.username or '[dim]not set[/]'}{_source(cfg, 'username')}"
+    )
     if not cfg.is_complete:
         raise ConfigError("TicketForge is not configured")
     with make_client(cfg) as client:

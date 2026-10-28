@@ -36,6 +36,19 @@ def test_unconfigured_cli_points_to_setup(tmp_path, monkeypatch):
     result = runner.invoke(app, ["list"])
     assert result.exit_code == 2
     assert "tforge setup" in result.output
+    assert ".env.example" in result.output
+
+
+def test_status_shows_credentials_from_dotenv(tmp_path, monkeypatch, api):
+    monkeypatch.setenv("TFORGE_CONFIG", str(tmp_path / "none.json"))
+    (tmp_path / ".env").write_text(
+        f"TFORGE_USERNAME=alice\nTFORGE_PASSWORD=pw\nTFORGE_BASE_URL={BASE}\n"
+    )
+    api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0, result.output
+    assert "alice (from .env)" in result.output
+    assert "Credentials OK" in result.output
 
 
 def test_setup_verifies_and_saves(tmp_path, monkeypatch, api):

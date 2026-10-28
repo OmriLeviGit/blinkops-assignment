@@ -90,8 +90,10 @@ Requires Python 3.10+.
 git clone https://github.com/OmriLeviGit/blinkops-assignment.git
 cd blinkops-assignment
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .            # or '.[dev]' to run the tests
+pip install -e .
 ```
+
+To run the tests, install `'.[dev]'` instead.
 
 Tested on Ubuntu 24.04 under WSL2 (Windows 11) with Python 3.12, starting from a fresh clone. It
 has no native dependencies, so Linux and macOS should work too (not tested).
@@ -99,13 +101,27 @@ has no native dependencies, so Linux and macOS should work too (not tested).
 ## Setup
 
 ```bash
-tforge setup                 # prompts for URL, username and password, verifies them, saves the config
-tforge register              # or create a new account first
-tforge status                # show the config, check the credentials, show the rate-limit quota
+tforge setup
+tforge status
 ```
 
-The config is saved to `~/.config/ticketforge/config.json` (mode `0600`). Environment variables
-override it: `TFORGE_USERNAME`, `TFORGE_PASSWORD`, `TFORGE_BASE_URL`, `TFORGE_CONFIG` (config path).
+`setup` prompts for the URL, username and password, verifies them and saves the config. No
+account yet? Run `tforge register` instead: it creates the account and saves the config. `status`
+shows the config, checks the credentials and shows the rate-limit quota.
+
+`setup` saves to `~/.config/ticketforge/config.json` (mode `0600`). Instead of a saved config,
+you can use a `.env` file in the directory you run `tforge` from:
+
+```bash
+cp .env.example .env
+tforge status
+```
+
+Fill in `TFORGE_USERNAME` and `TFORGE_PASSWORD` (`.env` is git-ignored). `status` shows where each
+setting came from, e.g. "alice (from .env)".
+
+Precedence: environment variables > `./.env` > saved config. The variables are `TFORGE_USERNAME`,
+`TFORGE_PASSWORD`, `TFORGE_BASE_URL` and `TFORGE_CONFIG` (config path).
 
 ## Usage
 
@@ -128,34 +144,40 @@ Most commands accept `--json`. Refs can be written as `TF-12` or just `12`. For 
 
 ```bash
 tforge list                        # page 1, 10 per page
-tforge list -p 2 -n 5              # page 2, 5 per page
-tforge list -a                     # everything
-tforge list -s in_progress         # filter by stage (open, in_progress, review, closed)
-tforge list -i                     # interactive: n/→ next, p/← previous, q quit
+tforge list -p 2 -n 5
+tforge list -a
+tforge list -s in_progress
+tforge list -i
 ```
 
-The interactive browser loads lazily: it fetches only when you move onto a new page, and going
-back is free. The page total (`Page 3/3`) appears once the end of the list is reached, because
-the API has no count endpoint.
+Stages are `open`, `in_progress`, `review` and `closed`. In the interactive browser (`-i`), use
+`n`/`→` for the next page, `p`/`←` for the previous one and `q` to quit. It loads lazily: it
+fetches only when you move onto a new page, and going back is free. The page total (`Page 3/3`)
+appears once the end of the list is reached, because the API has no count endpoint.
 
 ### Create and update
 
 ```bash
 tforge create "Ship v2" -d "Release" -s in_progress --dep TF-12 -f priority=high
-tforge update TF-12 -s review                  # only the stage changes
-tforge update TF-12 -t "New title" -d ''       # '' clears the description
+tforge update TF-12 -s review
+tforge update TF-12 -t "New title" -d ''
 tforge update TF-12 --add-dep TF-3 --remove-dep TF-4
-tforge update TF-12 -f priority=low -f team=   # set one field, unset another
+tforge update TF-12 -f priority=low -f team=
 ```
+
+`update` changes only the fields you pass. An empty value clears it: `-d ''` clears the
+description, `-f team=` unsets the `team` field.
 
 ### Other commands
 
 ```bash
 tforge show TF-12
-tforge delete TF-12                            # asks for confirmation (-y to skip)
-tforge fields add priority -l Priority         # custom fields are per-user text values
+tforge delete TF-12
+tforge fields add priority -l Priority
 tforge fields relabel priority Urgency
 ```
+
+`delete` asks for confirmation (`-y` skips it). Custom fields are per-user text values.
 
 ### Exit codes
 
@@ -186,8 +208,8 @@ src/ticketforge_cli/
 
 ## Assumptions and limitations
 
-- **The password is stored in plaintext** (in a `0600` file), because the API only supports Basic
-  auth. Use the environment variables to avoid writing it to disk.
+- **The password is stored in plaintext** (in a `0600` config file, or your `.env`), because the
+  API only supports Basic auth. Export the environment variables to avoid writing it to disk.
 - **Deep pages cost requests.** The API returns 5 tickets per request with no offset, so
   `--page N` steps through every earlier page (about N×limit/5 requests, against 50 per minute).
 - **Filtering is client-side**, because the server ignores filter parameters.

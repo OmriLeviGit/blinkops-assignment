@@ -1,14 +1,16 @@
 """Saved configuration with environment-variable overrides.
 
-Precedence: environment variables > config file > defaults.
+Precedence: environment variables > `.env` in the current directory > config file > defaults.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from dotenv import dotenv_values
 
 from .errors import ConfigError
 
@@ -19,12 +21,16 @@ ENV_USERNAME = "TFORGE_USERNAME"
 ENV_PASSWORD = "TFORGE_PASSWORD"
 ENV_CONFIG_PATH = "TFORGE_CONFIG"
 
+ENV_FILE = Path(".env")
+
 
 @dataclass
 class Config:
     base_url: str = DEFAULT_BASE_URL
     username: str | None = None
     password: str | None = None
+    # Where each overridden setting came from ("environment" or ".env"); not saved.
+    sources: dict[str, str] = field(default_factory=dict, compare=False)
 
     @property
     def is_complete(self) -> bool:
@@ -38,7 +44,7 @@ def config_path() -> Path:
     return Path(base) / "ticketforge" / "config.json"
 
 
-def load_config(path: Path | None = None) -> Config:
+def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
     path = path or config_path()
     cfg = Config()
     if path.exists():
@@ -52,9 +58,19 @@ def load_config(path: Path | None = None) -> Config:
             password=data.get("password"),
         )
 
-    cfg.base_url = os.environ.get(ENV_BASE_URL) or cfg.base_url
-    cfg.username = os.environ.get(ENV_USERNAME) or cfg.username
-    cfg.password = os.environ.get(ENV_PASSWORD) or cfg.password
+    dotenv = dotenv_values(env_file) if env_file.is_file() else {}
+    for attr, var in (
+        ("base_url", ENV_BASE_URL),
+        ("username", ENV_USERNAME),
+        ("password", ENV_PASSWORD),
+    ):
+        if value := os.environ.get(var):
+            cfg.sources[attr] = "environment"
+        elif value := dotenv.get(var):
+            cfg.sources[attr] = ".env"
+        else:
+            continue
+        setattr(cfg, attr, value)
     return cfg
 
 
@@ -64,6 +80,10 @@ def save_config(cfg: Config, path: Path | None = None) -> Path:
     # Create the file with 0600 from the start so the password is never world-readable.
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
-        json.dump(asdict(cfg), fh, indent=2)
+        json.dump(
+            {"base_url": cfg.base_url, "username": cfg.username, "password": cfg.password},
+            fh,
+            indent=2,
+        )
     os.chmod(path, 0o600)
     return path

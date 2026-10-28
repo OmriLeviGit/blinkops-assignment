@@ -95,6 +95,7 @@ $ tforge status [OPTIONS]
 
 ```console
 $ tforge status
+$ cp .env.example .env && tforge status  # credentials from ./.env
 ```
 
 ## `tforge list`
