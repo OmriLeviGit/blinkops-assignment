@@ -82,4 +82,7 @@ def error_from_response(status: int, body: object) -> TicketForgeError:
 
     if not message:
         message = code or f"HTTP {status}"
+        if status == 404 and not code:
+            # The API reports its own not-found errors with a code; a bare 404 is a wrong URL.
+            message += " (is the base URL right?)"
     return cls(message, code=code, status=status, retryable=retryable)

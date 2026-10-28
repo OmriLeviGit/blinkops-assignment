@@ -307,3 +307,15 @@ def test_verify_credentials_rejects_a_page_that_is_not_the_api(client, api):
     api.get("/workitems/mine").respond(200, text="<html>a web app</html>")
     with pytest.raises(TicketForgeError, match="is the base URL right"):
         client.verify_credentials()
+
+
+def test_bare_404_hints_at_the_base_url(client, api):
+    api.get("/workitem/TF-1").respond(404, text="<html>Not Found</html>")
+    with pytest.raises(TicketForgeError, match=r"HTTP 404 \(is the base URL right\?\)"):
+        client.get_workitem("TF-1")
+
+
+def test_api_not_found_has_no_url_hint(client, api):
+    api.get("/workitem/TF-1").respond(400, json={"err": "not_found", "message": "no such ticket"})
+    with pytest.raises(NotFoundError, match="^no such ticket$"):
+        client.get_workitem("TF-1")
