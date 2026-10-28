@@ -66,23 +66,10 @@ def test_list_page_parses_pagination_and_clamps_limit(client, api):
     assert route.calls.last.request.url.params["limit"] == "5"
 
 
-def test_iter_workitems_follows_cursor(client, api):
-    def handler(request):
-        if "cursor" not in request.url.params:
-            return httpx.Response(
-                200,
-                json={
-                    "workitems": [workitem("TF-3"), workitem("TF-2")],
-                    "pagination": {"hasMore": True, "nextCursor": "c1"},
-                },
-            )
-        assert request.url.params["cursor"] == "c1"
-        return httpx.Response(
-            200, json={"workitems": [workitem("TF-1")], "pagination": {"hasMore": False}}
-        )
-
-    api.get("/workitems/mine").mock(side_effect=handler)
-    assert [w.ref for w in client.iter_workitems()] == ["TF-3", "TF-2", "TF-1"]
+def test_list_page_sends_the_cursor(client, api):
+    route = api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
+    client.list_page(cursor="c1")
+    assert route.calls.last.request.url.params["cursor"] == "c1"
 
 
 def test_429_honors_retry_after(client, api, sleeps):
@@ -301,8 +288,22 @@ def test_delete_workitem_with_empty_response(client, api):
     assert route.called
 
 
-def test_iter_workitems_stops_without_cursor(client, api):
-    api.get("/workitems/mine").respond(
-        json={"workitems": [workitem("TF-1")], "pagination": {"hasMore": True}}  # no nextCursor
-    )
-    assert [w.ref for w in client.iter_workitems()] == ["TF-1"]
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(200, text="<html>not the API</html>"),
+        httpx.Response(200, json=[1, 2]),
+        httpx.Response(200, json={"something": "else"}),
+    ],
+    ids=["html", "list", "missing-key"],
+)
+def test_unexpected_success_body_is_an_error(client, api, response):
+    api.get("/workitem/TF-1").mock(return_value=response)
+    with pytest.raises(TicketForgeError, match="unexpected response"):
+        client.get_workitem("TF-1")
+
+
+def test_verify_credentials_rejects_a_page_that_is_not_the_api(client, api):
+    api.get("/workitems/mine").respond(200, text="<html>a web app</html>")
+    with pytest.raises(TicketForgeError, match="is the base URL right"):
+        client.verify_credentials()

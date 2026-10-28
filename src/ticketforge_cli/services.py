@@ -68,14 +68,12 @@ class TicketPager:
         self.stage = normalize_stage(stage) if stage else None
         self.loaded: list[WorkItem] = []
         self.exhausted = False
-        self.requests = 0
         self._cursor: str | None = None
 
     def ensure(self, count: int) -> None:
         """Fetch chunks until `count` matching tickets are cached or the list ends."""
         while len(self.loaded) < count and not self.exhausted:
             chunk = self.client.list_page(limit=MAX_PAGE_SIZE, cursor=self._cursor)
-            self.requests += 1
             self.loaded.extend(
                 w for w in chunk.items if self.stage is None or w.stage == self.stage
             )
@@ -243,18 +241,18 @@ class TicketService:
     def relabel_field(self, name_or_id: str, label: str) -> CustomField:
         if not label.strip():
             raise ValidationError("label must not be empty")
-        field = self._resolve_field(name_or_id)
+        field = self.find_field(name_or_id)
         updated = self.client.update_custom_field(field.id, label.strip())
         self._fields = None
         return updated
 
     def delete_field(self, name_or_id: str) -> CustomField:
-        field = self._resolve_field(name_or_id)
+        field = self.find_field(name_or_id)
         self.client.delete_custom_field(field.id)
         self._fields = None
         return field
 
-    def _resolve_field(self, name_or_id: str) -> CustomField:
+    def find_field(self, name_or_id: str) -> CustomField:
         for field in self.list_fields():
             if name_or_id in (field.name, field.id):
                 return field

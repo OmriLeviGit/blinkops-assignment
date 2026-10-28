@@ -281,7 +281,8 @@ def _ask(
 ) -> str:
     """Prompt until the answer passes `check`. `default=None` makes the answer required."""
     while True:
-        value = str(typer.prompt(prompt, default=default or "", show_default=bool(default))).strip()
+        value = typer.prompt(prompt, default=default or "", show_default=bool(default), err=True)
+        value = str(value).strip()
         if not value and default is None:
             views.error("a value is required")
             continue
@@ -721,9 +722,14 @@ def fields_delete(
     yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation.")] = False,
 ) -> None:
     """Delete a custom field. Its values are removed from all tickets."""
+    svc = get_service()
+    field = svc.find_field(name)  # fail on an unknown name before asking
     if not yes:
-        typer.confirm(f"Delete field '{name}' and its values on all tickets?", abort=True)
-    removed = get_service().delete_field(name)
+        typer.confirm(
+            f"Delete field '{field.name}' ({field.label}) and its values on all tickets?",
+            abort=True,
+        )
+    removed = svc.delete_field(field.id)
     views.success(f"Deleted field {escape(removed.name)}")
 
 

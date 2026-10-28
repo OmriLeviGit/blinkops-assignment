@@ -72,6 +72,16 @@ def test_setup_rejects_bad_credentials_without_saving(tmp_path, monkeypatch, api
     assert not path.exists()
 
 
+def test_setup_refuses_a_url_that_is_not_ticketforge(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    api.get("/workitems/mine").respond(200, text="<html>some web app</html>")
+    result = runner.invoke(app, ["setup", "-u", "alice", "-p", "pw", "--base-url", BASE])
+    assert result.exit_code == 1
+    assert "unexpected response" in result.output
+    assert not path.exists()
+
+
 def test_list_footer_suggests_next_page(configured, api):
     api.get("/workitems/mine").respond(
         json={
@@ -201,7 +211,9 @@ def test_create_prompts_for_title_and_prints_json(configured, api):
     result = runner.invoke(app, ["create", "--json"], input="From prompt\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert json.loads(post.calls.last.request.content)["title"] == "From prompt"
-    assert json.loads(result.output[result.output.index("{") :])["ref"] == "TF-3"
+    # Prompts go to stderr, so stdout holds only the JSON (plus the runner's echo of the input).
+    assert "Title" not in result.stdout
+    assert json.loads(result.stdout[result.stdout.index("{") :])["ref"] == "TF-3"
 
 
 # ------------------------------------------------------------------ setup / register / status
@@ -630,9 +642,10 @@ def test_fields_delete_confirmation(configured, api, args, answer, deleted):
 
 def test_fields_delete_unknown(configured, api):
     api.get("/custom-fields").respond(json=FIELDS)
-    result = runner.invoke(app, ["fields", "delete", "nope", "--yes"])
+    result = runner.invoke(app, ["fields", "delete", "nope"])
     assert result.exit_code == 1
     assert "custom field 'nope' not found" in result.output
+    assert "Delete field" not in result.output  # no confirmation for a field that isn't there
 
 
 MARKUP = "fix [/] bug [red]x"

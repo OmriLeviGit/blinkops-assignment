@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -24,6 +24,7 @@ MAX_PAGE_SIZE = 5  # server clamps `limit` to 1..5
 
 IDEMPOTENT_METHODS = {"GET", "HEAD", "PUT", "DELETE", "OPTIONS"}
 MAX_WAIT_SECONDS = 60.0
+UNEXPECTED_RESPONSE = "unexpected response from TicketForge (is the base URL right?)"
 
 
 class TicketForgeClient:
@@ -81,7 +82,10 @@ class TicketForgeClient:
 
             self._record_rate_limit(response)
             if response.is_success:
-                return _json(response)
+                data = _json(response)
+                if response.content and not isinstance(data, dict):
+                    raise TicketForgeError(UNEXPECTED_RESPONSE)
+                return data
 
             error = error_from_response(response.status_code, _json(response))
             if attempt < self.max_retries and self._should_retry(method, response, error):
@@ -149,7 +153,8 @@ class TicketForgeClient:
         )
 
     def verify_credentials(self) -> None:
-        self.request("GET", "/workitems/mine", params={"limit": 1})
+        # A wrong base URL can still answer 200 (an HTML page), so check the shape too.
+        _field(self.request("GET", "/workitems/mine", params={"limit": 1}), "workitems")
 
     def list_page(self, *, limit: int = MAX_PAGE_SIZE, cursor: str | None = None) -> Page:
         params: dict[str, Any] = {"limit": max(1, min(int(limit), MAX_PAGE_SIZE))}
@@ -163,26 +168,17 @@ class TicketForgeClient:
             next_cursor=pagination.get("nextCursor"),
         )
 
-    def iter_workitems(self, *, cursor: str | None = None) -> Iterator[WorkItem]:
-        while True:
-            page = self.list_page(cursor=cursor)
-            yield from page.items
-            if not page.has_more or not page.next_cursor:
-                return
-            cursor = page.next_cursor
-
-    def get_workitem(self, ref: str, *, deep: bool = True) -> WorkItem:
-        params = {"view": "deep"} if deep else None
-        data = self.request("GET", f"/workitem/{ref}", params=params)
-        return WorkItem.from_api(data["workitem"])
+    def get_workitem(self, ref: str) -> WorkItem:
+        data = self.request("GET", f"/workitem/{ref}", params={"view": "deep"})
+        return WorkItem.from_api(_field(data, "workitem"))
 
     def create_workitem(self, payload: dict[str, Any]) -> WorkItem:
         data = self.request("POST", "/workitem/publish", json=payload)
-        return WorkItem.from_api(data["workitem"])
+        return WorkItem.from_api(_field(data, "workitem"))
 
     def update_workitem(self, ref: str, payload: dict[str, Any]) -> WorkItem:
         data = self.request("PUT", f"/workitem/{ref}", json=payload)
-        return WorkItem.from_api(data["workitem"])
+        return WorkItem.from_api(_field(data, "workitem"))
 
     def delete_workitem(self, ref: str) -> None:
         self.request("DELETE", f"/workitem/{ref}")
@@ -193,11 +189,11 @@ class TicketForgeClient:
 
     def create_custom_field(self, name: str, label: str) -> CustomField:
         data = self.request("POST", "/custom-fields", json={"name": name, "label": label})
-        return CustomField.from_api(data["customField"])
+        return CustomField.from_api(_field(data, "customField"))
 
     def update_custom_field(self, field_id: str, label: str) -> CustomField:
         data = self.request("PUT", f"/custom-fields/{field_id}", json={"label": label})
-        return CustomField.from_api(data["customField"])
+        return CustomField.from_api(_field(data, "customField"))
 
     def delete_custom_field(self, field_id: str) -> None:
         self.request("DELETE", f"/custom-fields/{field_id}")
@@ -210,6 +206,13 @@ def _json(response: httpx.Response) -> Any:
         return response.json()
     except ValueError:
         return {}
+
+
+def _field(data: dict[str, Any], key: str) -> Any:
+    value = data.get(key)
+    if value is None:
+        raise TicketForgeError(UNEXPECTED_RESPONSE)
+    return value
 
 
 def _parse_reset(value: str | None) -> datetime | None:
