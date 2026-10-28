@@ -1,7 +1,9 @@
 import json
+import signal
 
 import httpx
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from ticketforge_cli import __version__
@@ -560,6 +562,7 @@ def test_update_json(configured, api):
 
 def test_update_without_options_asks_and_sends_nothing_on_eof(configured, api):
     api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    api.get("/custom-fields").respond(json={"customFields": []})
     put = api.put("/workitem/TF-5")
     result = runner.invoke(app, ["update", "TF-5"])  # no input: EOF at the first prompt
     assert result.exit_code == 1
@@ -795,7 +798,7 @@ def test_update_guided_sends_only_what_changed(configured, api):
         dependsOn=["TF-1"],
         customFields={"priority": "high"},
     )
-    api.get("/workitem/TF-5").respond(json={"workitem": current})
+    get = api.get("/workitem/TF-5").respond(json={"workitem": current})
     api.get("/custom-fields").respond(json=FIELDS)
     put = api.put("/workitem/TF-5").respond(json={"workitem": current})
     # title: keep, description: clear, stage: "-" refused then review, deps: change, priority: keep
@@ -811,6 +814,7 @@ def test_update_guided_sends_only_what_changed(configured, api):
         "dependsOn": ["TF-2", "TF-3"],
         "customFields": {"priority": "high"},
     }
+    assert get.call_count == 1  # the ticket fetched for the defaults is reused for the merge
 
 
 def test_update_guided_without_changes_sends_nothing(configured, api):
@@ -821,3 +825,24 @@ def test_update_guided_without_changes_sends_nothing(configured, api):
     assert result.exit_code == 0, result.output
     assert "No changes" in result.output
     assert not put.called
+
+
+def test_ctrl_c_at_a_prompt_exits_130(configured, api, monkeypatch):
+    def interrupted_prompt(*args, **kwargs):
+        # What Typer's prompt does with Ctrl-C: the signal fires, then it raises Abort.
+        try:
+            signal.raise_signal(signal.SIGINT)
+        except KeyboardInterrupt:
+            raise typer.Abort() from None
+
+    monkeypatch.setattr(typer, "prompt", interrupted_prompt)
+    result = runner.invoke(app, ["create"])
+    assert result.exit_code == 130
+    assert "Interrupted" in result.output
+    assert signal.getsignal(signal.SIGINT) is signal.default_int_handler  # handler restored
+
+
+def test_end_of_input_at_a_prompt_still_aborts(configured, api):
+    result = runner.invoke(app, ["create"])  # no input
+    assert result.exit_code == 1
+    assert "Interrupted" not in result.output

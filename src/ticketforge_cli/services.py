@@ -176,18 +176,20 @@ class TicketService:
         add_deps: Iterable[str] = (),
         remove_deps: Iterable[str] = (),
         fields: dict[str, str] | None = None,
+        current: WorkItem | None = None,
     ) -> WorkItem:
         """Apply only the given changes, preserving everything else.
 
         `depends_on` replaces the whole list (an empty iterable clears it).
         In `fields`, an empty value removes that field from the ticket.
+        `current` is the ticket as just fetched, if the caller has it; otherwise it is fetched.
         """
         add_deps, remove_deps = list(add_deps), list(remove_deps)
         changes = [title, description, stage, depends_on, fields]
         if all(c is None for c in changes) and not add_deps and not remove_deps:
             raise ValidationError("nothing to update; pass at least one option")
 
-        ticket = self.get_ticket(ref)
+        ticket = current or self.get_ticket(ref)
 
         if title is not None:
             if not title.strip():

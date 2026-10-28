@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import re
 import shlex
+import signal
 import sys
 from collections.abc import Callable
 from typing import Annotated, Any, TypeVar
@@ -16,6 +17,7 @@ from . import __version__, views
 from .client import TicketForgeClient
 from .config import Config, config_path, load_config, save_config, validate_base_url
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
+from .models import CustomField, WorkItem
 from .services import (
     TicketPager,
     TicketService,
@@ -77,6 +79,15 @@ _open_clients: list[TicketForgeClient] = []
 def handle_errors(func: F) -> F:
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        # Typer's prompts turn Ctrl-C into the same Abort as end of input, so note the signal.
+        interrupted = False
+
+        def on_sigint(signum: int, frame: Any) -> None:
+            nonlocal interrupted
+            interrupted = True
+            signal.default_int_handler(signum, frame)
+
+        previous = signal.signal(signal.SIGINT, on_sigint)
         try:
             return func(*args, **kwargs)
         except AuthError as exc:
@@ -88,15 +99,24 @@ def handle_errors(func: F) -> F:
         except TicketForgeError as exc:
             views.error(exc.message)
             raise typer.Exit(1) from None
+        except typer.Abort:
+            if not interrupted:
+                raise  # end of input or a "no" to a confirmation: Typer prints "Aborted!"
+            _exit_interrupted()
         except KeyboardInterrupt:
-            views.err_console.print()  # the cursor may be mid-line (prompt, spinner)
-            views.error("Interrupted")
-            raise typer.Exit(130) from None
+            _exit_interrupted()
         finally:
+            signal.signal(signal.SIGINT, previous)
             while _open_clients:
                 _open_clients.pop().close()
 
     return wrapper  # type: ignore[return-value]
+
+
+def _exit_interrupted() -> None:
+    views.err_console.print()  # the cursor may be mid-line (prompt, spinner)
+    views.error("Interrupted")
+    raise typer.Exit(130) from None
 
 
 def _on_wait(seconds: float, reason: str) -> None:
@@ -541,9 +561,8 @@ def _check_refs_or_clear(value: str) -> None:
         _check_refs(value)
 
 
-def _ask_for_changes(svc: TicketService, ref: str) -> dict[str, Any]:
+def _ask_for_changes(current: WorkItem, fields: list[CustomField]) -> dict[str, Any]:
     """Ask for each field, defaulting to the current value; return only what changed."""
-    current = svc.get_ticket(ref)
     views.info(f"Editing {current.ref}. Enter keeps the current value, {CLEAR} clears it.")
     changes: dict[str, Any] = {}
 
@@ -567,15 +586,15 @@ def _ask_for_changes(svc: TicketService, ref: str) -> dict[str, Any]:
     dep_refs = [] if deps == CLEAR else [normalize_ref(r) for r in _split_refs(deps)]
     if dep_refs != current.depends_on:
         changes["depends_on"] = dep_refs
-    fields = {}
-    for f in svc.list_fields():
+    values = {}
+    for f in fields:
         old = current.custom_fields.get(f.name, "")
         value = _ask(f.label, default=old)
         value = "" if value == CLEAR else value
         if value != old:
-            fields[f.name] = value
-    if fields:
-        changes["fields"] = fields
+            values[f.name] = value
+    if values:
+        changes["fields"] = values
     return changes
 
 
@@ -624,10 +643,12 @@ def update(
     svc = get_service()
     options = [title, description, stage, depends_on, add_dep, remove_dep, field]
     if not clear_deps and all(o is None for o in options):
-        changes = _ask_for_changes(svc, ref)
+        current = svc.get_ticket(ref)
+        changes = _ask_for_changes(current, svc.list_fields())
         if not changes:
             views.info("No changes")
             return
+        changes["current"] = current  # already fetched; saves update_ticket a request
     else:
         changes = {
             "title": title,
