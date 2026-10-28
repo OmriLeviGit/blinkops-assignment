@@ -211,7 +211,9 @@ def test_create_prompts_for_title_and_prints_json(configured, api):
     result = runner.invoke(app, ["create", "--json"], input="From prompt\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert json.loads(post.calls.last.request.content)["title"] == "From prompt"
-    assert json.loads(result.output[result.output.index("{") :])["ref"] == "TF-3"
+    # Prompts go to stderr, so stdout holds only the JSON (plus the runner's echo of the input).
+    assert "Title" not in result.stdout
+    assert json.loads(result.stdout[result.stdout.index("{") :])["ref"] == "TF-3"
 
 
 # ------------------------------------------------------------------ setup / register / status

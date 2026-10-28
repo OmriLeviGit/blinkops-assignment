@@ -281,7 +281,8 @@ def _ask(
 ) -> str:
     """Prompt until the answer passes `check`. `default=None` makes the answer required."""
     while True:
-        value = str(typer.prompt(prompt, default=default or "", show_default=bool(default))).strip()
+        value = typer.prompt(prompt, default=default or "", show_default=bool(default), err=True)
+        value = str(value).strip()
         if not value and default is None:
             views.error("a value is required")
             continue
