@@ -18,7 +18,7 @@ $ tforge [OPTIONS] COMMAND [ARGS]...
 **Commands**:
 
 * `setup`: Configure and verify the connection to...
-* `register`: Create a new TicketForge account.
+* `register`: Create a new TicketForge account and...
 * `status`: Show the active configuration and check...
 * `list`: List your tickets, newest first.
 * `show`: Show a single ticket in full.
@@ -30,6 +30,8 @@ $ tforge [OPTIONS] COMMAND [ARGS]...
 ## `tforge setup`
 
 Configure and verify the connection to TicketForge.
+
+If the login fails, offers to create the account.
 
 **Usage**:
 
@@ -54,7 +56,7 @@ $ TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars, no con
 
 ## `tforge register`
 
-Create a new TicketForge account.
+Create a new TicketForge account and switch to it.
 
 **Usage**:
 

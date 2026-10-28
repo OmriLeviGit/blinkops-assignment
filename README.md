@@ -105,9 +105,10 @@ tforge setup
 tforge status
 ```
 
-`setup` prompts for the URL, username and password, verifies them and saves the config. No
-account yet? Run `tforge register` instead: it creates the account and saves the config. `status`
-shows the config, checks the credentials and shows the rate-limit quota.
+`setup` prompts for the URL, username and password, verifies them and saves the config. If the
+login fails (no such account yet), it offers to create the account. To create another account
+later and switch to it, run `tforge register`. `status` shows the config, checks the credentials
+and shows the rate-limit quota.
 
 `setup` saves to `~/.config/ticketforge/config.json` (mode `0600`). Instead of a saved config,
 you can use a `.env` file in the directory you run `tforge` from:

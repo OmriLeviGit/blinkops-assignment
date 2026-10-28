@@ -120,19 +120,51 @@ def setup(
     ] = None,
     base_url: Annotated[str | None, typer.Option("--base-url", help="TicketForge app URL.")] = None,
 ) -> None:
-    """Configure and verify the connection to TicketForge."""
+    """Configure and verify the connection to TicketForge.
+
+    If the login fails, offers to create the account.
+    """
     current = load_config()
     base_url = base_url or typer.prompt(
         "TicketForge URL", default=current.base_url or DEFAULT_BASE_URL
     )
     username = username or typer.prompt("Username", default=current.username or None)
+    password_prompted = password is None
     password = password or typer.prompt("Password", hide_input=True)
 
     cfg = Config(base_url=base_url.rstrip("/"), username=username, password=password)
     with make_client(cfg) as client:
-        client.verify_credentials()
+        try:
+            client.verify_credentials()
+        except AuthError:
+            # The API answers 401 for an unknown user and for a wrong password alike.
+            if not _confirm(f"Login failed. Create a new account '{username}' with this password?"):
+                raise
+            if password_prompted and typer.prompt("Repeat password", hide_input=True) != password:
+                raise ValidationError("Passwords do not match") from None
+            _register_from_setup(cfg)
+            client.verify_credentials()
     path = save_config(cfg)
     views.success(f"Connected as [bold]{username}[/]. Config saved to {path}")
+
+
+def _confirm(question: str) -> bool:
+    """Ask yes/no; no input (e.g. a script) counts as no."""
+    try:
+        return typer.confirm(question, default=False)
+    except typer.Abort:
+        return False
+
+
+def _register_from_setup(cfg: Config) -> None:
+    with make_client(cfg, auth=False) as client:
+        try:
+            client.register(cfg.username, cfg.password)
+        except ValidationError as exc:
+            if exc.code == "duplicate":
+                raise AuthError(f"Account '{cfg.username}' exists; the password is wrong") from None
+            raise
+    views.success(f"Account [bold]{cfg.username}[/] created")
 
 
 @app.command(
@@ -158,7 +190,7 @@ def register(
         bool, typer.Option(help="Save the new credentials as the active config.")
     ] = True,
 ) -> None:
-    """Create a new TicketForge account."""
+    """Create a new TicketForge account and switch to it."""
     base_url = (base_url or load_config().base_url).rstrip("/")
     username = username or typer.prompt("Username")
     password = password or typer.prompt("Password", hide_input=True, confirmation_prompt=True)

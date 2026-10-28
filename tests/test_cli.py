@@ -214,6 +214,49 @@ def test_setup_prompts_and_strips_trailing_slash(tmp_path, monkeypatch, api):
     assert json.loads(path.read_text()) == {"base_url": BASE, "username": "alice", "password": "pw"}
 
 
+UNAUTHORIZED = httpx.Response(401, json={"err": "unauthorized", "message": "bad auth"})
+EMPTY_PAGE = httpx.Response(200, json={"workitems": [], "pagination": {}})
+
+
+def test_setup_offers_to_register_unknown_user(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    api.get("/workitems/mine").mock(side_effect=[UNAUTHORIZED, EMPTY_PAGE])
+    route = api.post("/user/register").respond(json={"ok": True})
+    result = runner.invoke(app, ["setup", "--base-url", BASE], input="carol\npw\ny\npw\n")
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content) == {"username": "carol", "password": "pw"}
+    assert "Account carol created" in result.output
+    assert json.loads(path.read_text())["username"] == "carol"
+
+
+def test_setup_register_password_mismatch(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    api.get("/workitems/mine").mock(return_value=UNAUTHORIZED)
+    route = api.post("/user/register")
+    result = runner.invoke(app, ["setup", "--base-url", BASE], input="carol\npw\ny\npx\n")
+    assert result.exit_code == 1
+    assert "Passwords do not match" in result.output
+    assert not route.called
+    assert not path.exists()
+
+
+def test_setup_register_existing_user_means_wrong_password(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    api.get("/workitems/mine").mock(return_value=UNAUTHORIZED)
+    api.post("/user/register").respond(
+        400, json={"err": "duplicate", "message": "username already taken"}
+    )
+    result = runner.invoke(
+        app, ["setup", "-u", "alice", "-p", "bad", "--base-url", BASE], input="y\n"
+    )
+    assert result.exit_code == 2
+    assert "the password is wrong" in result.output
+    assert not path.exists()
+
+
 def test_register_saves_config_by_default(tmp_path, monkeypatch, api):
     path = tmp_path / "cfg.json"
     monkeypatch.setenv("TFORGE_CONFIG", str(path))
