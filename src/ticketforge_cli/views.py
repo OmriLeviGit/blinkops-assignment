@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -49,10 +50,10 @@ def ticket_table(items: list[WorkItem], title: str | None = None) -> Table:
     table.add_column("Updated", style="dim", no_wrap=True)
     for item in items:
         table.add_row(
-            item.ref,
+            Text(item.ref),
             stage_badge(item.stage),
-            item.title,
-            _excerpt(item.description),
+            Text(item.title),
+            Text(_excerpt(item.description)),
             _when(item.updated),
         )
     return table
@@ -64,7 +65,10 @@ def ticket_detail(item: WorkItem, labels: dict[str, str] | None = None) -> Panel
     grid.add_column(style="bold", no_wrap=True)
     grid.add_column()
     grid.add_row("Stage", stage_badge(item.stage))
-    grid.add_row("Description", item.description or Text("No description", style="dim italic"))
+    grid.add_row(
+        "Description",
+        Text(item.description) if item.description else Text("No description", style="dim italic"),
+    )
     grid.add_row(
         "Depends on",
         Text(", ".join(item.depends_on), style="blue")
@@ -72,13 +76,16 @@ def ticket_detail(item: WorkItem, labels: dict[str, str] | None = None) -> Panel
         else Text("-", style="dim"),
     )
     for name, value in item.custom_fields.items():
-        grid.add_row(labels.get(name, name), value)
+        grid.add_row(Text(labels.get(name, name)), Text(value))
     if item.owner:
-        grid.add_row("Owner", item.owner)
+        grid.add_row("Owner", Text(item.owner))
     grid.add_row("Created", _when(item.created))
     grid.add_row("Updated", _when(item.updated))
     return Panel(
-        grid, title=f"[bold blue]{item.ref}[/] {item.title}", title_align="left", expand=False
+        grid,
+        title=f"[bold blue]{escape(item.ref)}[/] {escape(item.title)}",
+        title_align="left",
+        expand=False,
     )
 
 
@@ -89,7 +96,7 @@ def fields_table(fields: list[CustomField]) -> Table:
     table.add_column("Type", style="dim")
     table.add_column("ID", style="dim")
     for f in fields:
-        table.add_row(f.name, f.label, f.type, f.id)
+        table.add_row(Text(f.name), Text(f.label), Text(f.type), Text(f.id))
     return table
 
 
@@ -117,10 +124,10 @@ def success(message: str) -> None:
 
 
 def info(message: str) -> None:
-    err_console.print(f"[dim]{message}[/]")
+    err_console.print(f"[dim]{escape(message)}[/]")
 
 
 def error(message: str, hint: str | None = None) -> None:
-    err_console.print(f"[bold red]Error:[/] {message}")
+    err_console.print(f"[bold red]Error:[/] {escape(message)}")
     if hint:
-        err_console.print(f"[dim]{hint}[/]")
+        err_console.print(f"[dim]{escape(hint)}[/]")

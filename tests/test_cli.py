@@ -617,3 +617,31 @@ def test_fields_delete_unknown(configured, api):
     result = runner.invoke(app, ["fields", "delete", "nope", "--yes"])
     assert result.exit_code == 1
     assert "custom field 'nope' not found" in result.output
+
+
+MARKUP = "fix [/] bug [red]x"
+
+
+def test_markup_in_ticket_text_is_shown_literally(configured, api):
+    item = workitem("TF-1", title=MARKUP, description=MARKUP)
+    api.get("/workitems/mine").respond(json={"workitems": [item], "pagination": {}})
+    api.get("/workitem/TF-1").respond(json={"workitem": item})
+    for args in (["list"], ["show", "1"]):
+        result = runner.invoke(app, args)
+        assert result.exit_code == 0, result.output
+        assert MARKUP in result.output
+
+
+def test_markup_in_server_error_is_shown_literally(configured, api):
+    api.get("/workitem/TF-1").respond(400, json={"err": "not_found", "message": MARKUP})
+    result = runner.invoke(app, ["show", "1"])
+    assert result.exit_code == 1
+    assert MARKUP in result.output
+
+
+def test_markup_in_username_is_shown_literally(tmp_path, monkeypatch, api):
+    monkeypatch.setenv("TFORGE_CONFIG", str(tmp_path / "cfg.json"))
+    api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
+    result = runner.invoke(app, ["setup", "-u", "a[/]b", "-p", "pw", "--base-url", BASE])
+    assert result.exit_code == 0, result.output
+    assert "Connected as a[/]b" in result.output

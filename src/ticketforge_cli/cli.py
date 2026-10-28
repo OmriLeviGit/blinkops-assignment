@@ -9,10 +9,11 @@ from collections.abc import Callable
 from typing import Annotated, Any, TypeVar
 
 import typer
+from rich.markup import escape
 
 from . import __version__, views
 from .client import TicketForgeClient
-from .config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
+from .config import Config, config_path, load_config, save_config
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
 from .services import TicketPager, TicketService, normalize_stage, parse_field_assignments
 
@@ -105,7 +106,7 @@ def get_service() -> TicketService:
 
 @app.command(
     epilog=examples(
-        "tforge setup  # prompts for URL, username and password",
+        "tforge setup  # prompts for username and password",
         "tforge setup -u alice -p 's3cret'",
         "TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars, no config file",
     )
@@ -118,16 +119,17 @@ def setup(
     password: Annotated[
         str | None, typer.Option("--password", "-p", help="Prompted (hidden) if omitted.")
     ] = None,
-    base_url: Annotated[str | None, typer.Option("--base-url", help="TicketForge app URL.")] = None,
+    base_url: Annotated[
+        str | None,
+        typer.Option("--base-url", help="TicketForge app URL (default: configured URL)."),
+    ] = None,
 ) -> None:
     """Configure and verify the connection to TicketForge.
 
     If the login fails, offers to create the account.
     """
     current = load_config()
-    base_url = base_url or typer.prompt(
-        "TicketForge URL", default=current.base_url or DEFAULT_BASE_URL
-    )
+    base_url = base_url or current.base_url
     username = username or typer.prompt("Username", default=current.username or None)
     password_prompted = password is None
     password = password or typer.prompt("Password", hide_input=True)
@@ -142,10 +144,13 @@ def setup(
                 raise
             if password_prompted and typer.prompt("Repeat password", hide_input=True) != password:
                 raise ValidationError("Passwords do not match") from None
-            _register_from_setup(cfg)
+            _register_from_setup(cfg, username, password)
             client.verify_credentials()
     path = save_config(cfg)
-    views.success(f"Connected as [bold]{username}[/]. Config saved to {path}")
+    views.success(
+        f"Connected to {escape(cfg.base_url)} as [bold]{escape(username)}[/]."
+        f" Config saved to {escape(str(path))}"
+    )
 
 
 def _confirm(question: str) -> bool:
@@ -156,15 +161,15 @@ def _confirm(question: str) -> bool:
         return False
 
 
-def _register_from_setup(cfg: Config) -> None:
+def _register_from_setup(cfg: Config, username: str, password: str) -> None:
     with make_client(cfg, auth=False) as client:
         try:
-            client.register(cfg.username, cfg.password)
+            client.register(username, password)
         except ValidationError as exc:
             if exc.code == "duplicate":
-                raise AuthError(f"Account '{cfg.username}' exists; the password is wrong") from None
+                raise AuthError(f"Account '{username}' exists; the password is wrong") from None
             raise
-    views.success(f"Account [bold]{cfg.username}[/] created")
+    views.success(f"Account [bold]{escape(username)}[/] created")
 
 
 @app.command(
@@ -196,10 +201,10 @@ def register(
     password = password or typer.prompt("Password", hide_input=True, confirmation_prompt=True)
     with make_client(Config(base_url=base_url), auth=False) as client:
         client.register(username, password)
-    views.success(f"Account [bold]{username}[/] created")
+    views.success(f"Account [bold]{escape(username)}[/] created")
     if save:
         path = save_config(Config(base_url=base_url, username=username, password=password))
-        views.success(f"Config saved to {path}")
+        views.success(f"Config saved to {escape(str(path))}")
 
 
 def _source(cfg: Config, attr: str) -> str:
@@ -217,11 +222,10 @@ def _source(cfg: Config, attr: str) -> str:
 def status() -> None:
     """Show the active configuration and check the connection."""
     cfg = load_config()
-    views.console.print(f"Config file: {config_path()}")
-    views.console.print(f"URL:         {cfg.base_url}{_source(cfg, 'base_url')}")
-    views.console.print(
-        f"Username:    {cfg.username or '[dim]not set[/]'}{_source(cfg, 'username')}"
-    )
+    views.console.print(f"Config file: {escape(str(config_path()))}")
+    views.console.print(f"URL:         {escape(cfg.base_url)}{_source(cfg, 'base_url')}")
+    username = escape(cfg.username) if cfg.username else "[dim]not set[/]"
+    views.console.print(f"Username:    {username}{_source(cfg, 'username')}")
     if not cfg.is_complete:
         raise ConfigError("TicketForge is not configured")
     with make_client(cfg) as client:
@@ -426,7 +430,7 @@ def create(
     if as_json:
         views.print_json(ticket)
         return
-    views.success(f"Created [bold blue]{ticket.ref}[/]")
+    views.success(f"Created [bold blue]{escape(ticket.ref)}[/]")
     labels = {f.name: f.label for f in svc.list_fields()} if ticket.custom_fields else {}
     views.console.print(views.ticket_detail(ticket, labels))
 
@@ -483,7 +487,7 @@ def update(
     if as_json:
         views.print_json(ticket)
         return
-    views.success(f"Updated [bold blue]{ticket.ref}[/]")
+    views.success(f"Updated [bold blue]{escape(ticket.ref)}[/]")
     labels = {f.name: f.label for f in svc.list_fields()} if ticket.custom_fields else {}
     views.console.print(views.ticket_detail(ticket, labels))
 
@@ -500,7 +504,7 @@ def delete(
     if not yes:
         typer.confirm(f'Delete {ticket.ref} "{ticket.title}"?', abort=True)
     svc.delete_ticket(ticket.ref)
-    views.success(f"Deleted {ticket.ref}")
+    views.success(f"Deleted {escape(ticket.ref)}")
 
 
 # ------------------------------------------------------------ custom fields
@@ -535,7 +539,7 @@ def fields_add(
 ) -> None:
     """Define a new custom field."""
     created = get_service().add_field(name, label)
-    views.success(f"Added field [bold]{created.name}[/] ({created.label})")
+    views.success(f"Added field [bold]{escape(created.name)}[/] ({escape(created.label)})")
 
 
 @fields_app.command("relabel", epilog=examples("tforge fields relabel priority Urgency"))
@@ -546,7 +550,9 @@ def fields_relabel(
 ) -> None:
     """Change a custom field's display label (the API does not allow renaming)."""
     updated = get_service().relabel_field(name, label)
-    views.success(f'Field [bold]{updated.name}[/] is now labelled "{updated.label}"')
+    views.success(
+        f'Field [bold]{escape(updated.name)}[/] is now labelled "{escape(updated.label)}"'
+    )
 
 
 @fields_app.command(
@@ -564,7 +570,7 @@ def fields_delete(
     if not yes:
         typer.confirm(f"Delete field '{name}' and its values on all tickets?", abort=True)
     removed = get_service().delete_field(name)
-    views.success(f"Deleted field {removed.name}")
+    views.success(f"Deleted field {escape(removed.name)}")
 
 
 if __name__ == "__main__":
