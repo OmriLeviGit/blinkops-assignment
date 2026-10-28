@@ -153,7 +153,10 @@ DELETE /custom-fields/{id}                                          → {"succes
 - Dependencies must exist (`dependency tickets do not exist: TF-999999`) and must belong
   to the caller (`forbidden: you can only depend on your own tickets`).
 - **Dependency cycles are allowed** (A → B → A was accepted).
-- Refs come from one global sequence (`TF-<n>`) shared by all users.
+- Refs (`TF-<n>`) are global across all users and appear to be assigned as
+  `max(existing) + 1`: after `TF-593` (the newest ticket) was deleted, the next
+  ticket created got `TF-593` again. **A ref is not a stable identifier**, so a
+  stale ref can later point at a different ticket.
 
 ## Errors
 
