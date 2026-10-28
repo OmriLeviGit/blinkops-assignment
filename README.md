@@ -10,7 +10,10 @@ This part is for whoever is reviewing the assignment. The [user guide](#user-gui
 
 ### AI disclosure
 
-
+I used an AI coding assistant (Claude Code) throughout: for reverse-engineering the API and for
+development, testing and documentation. I directed the work (architecture, UX decisions, scope),
+reviewed the output, and verified the results against the live API. Details in
+[AI_DISCLOSURE.md](AI_DISCLOSURE.md).
 
 ### Documentation and evidence
 
