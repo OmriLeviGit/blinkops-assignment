@@ -205,13 +205,24 @@ def test_create_prompts_for_title_and_prints_json(configured, api):
 # ------------------------------------------------------------------ setup / register / status
 
 
-def test_setup_prompts_and_strips_trailing_slash(tmp_path, monkeypatch, api):
+def test_setup_prompts_only_for_credentials(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    monkeypatch.setenv("TFORGE_BASE_URL", BASE)
+    api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
+    result = runner.invoke(app, ["setup"], input="alice\npw\n")
+    assert result.exit_code == 0, result.output
+    assert "URL" not in result.output.split("Connected")[0]
+    assert json.loads(path.read_text()) == {"base_url": BASE, "username": "alice", "password": "pw"}
+
+
+def test_setup_strips_trailing_slash(tmp_path, monkeypatch, api):
     path = tmp_path / "cfg.json"
     monkeypatch.setenv("TFORGE_CONFIG", str(path))
     api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
-    result = runner.invoke(app, ["setup"], input=f"{BASE}/\nalice\npw\n")
+    result = runner.invoke(app, ["setup", "-u", "alice", "-p", "pw", "--base-url", f"{BASE}/"])
     assert result.exit_code == 0, result.output
-    assert json.loads(path.read_text()) == {"base_url": BASE, "username": "alice", "password": "pw"}
+    assert json.loads(path.read_text())["base_url"] == BASE
 
 
 UNAUTHORIZED = httpx.Response(401, json={"err": "unauthorized", "message": "bad auth"})
@@ -644,4 +655,4 @@ def test_markup_in_username_is_shown_literally(tmp_path, monkeypatch, api):
     api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
     result = runner.invoke(app, ["setup", "-u", "a[/]b", "-p", "pw", "--base-url", BASE])
     assert result.exit_code == 0, result.output
-    assert "Connected as a[/]b" in result.output
+    assert "as a[/]b." in result.output

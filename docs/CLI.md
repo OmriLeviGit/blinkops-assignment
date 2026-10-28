@@ -43,13 +43,13 @@ $ tforge setup [OPTIONS]
 
 * `-u, --username <str>`: Prompted if omitted.
 * `-p, --password <str>`: Prompted (hidden) if omitted.
-* `--base-url <str>`: TicketForge app URL.
+* `--base-url <str>`: TicketForge app URL (default: configured URL).
 * `--help`: Show this message and exit.
 
 **Examples**:
 
 ```console
-$ tforge setup  # prompts for URL, username and password
+$ tforge setup  # prompts for username and password
 $ tforge setup -u alice -p 's3cret'
 $ TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars, no config file
 ```

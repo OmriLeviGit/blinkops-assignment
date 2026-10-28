@@ -105,8 +105,9 @@ tforge setup
 tforge status
 ```
 
-`setup` prompts for the URL, username and password, verifies them and saves the config. If the
-login fails (no such account yet), it offers to create the account. To create another account
+`setup` prompts for a username and password, verifies them and saves the config. If the login
+fails (no such account yet), it offers to create the account. It connects to the assignment's
+TicketForge server; pass `--base-url` (or set `TFORGE_BASE_URL`) to use another one. To create another account
 later and switch to it, run `tforge register`. `status` shows the config, checks the credentials
 and shows the rate-limit quota.
 
