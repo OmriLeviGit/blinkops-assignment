@@ -10,7 +10,7 @@ from typing import Annotated, Any, TypeVar
 
 import typer
 
-from . import views
+from . import __version__, views
 from .client import TicketForgeClient
 from .config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
@@ -36,6 +36,28 @@ def examples(*lines: str) -> str:
         cmd, _, note = line.partition("#")
         rendered.append(f"{cmd.rstrip()}  [dim]# {note.strip()}[/]" if note else cmd.rstrip())
     return "[bold]Examples[/]\n\n" + "\n".join(rendered)
+
+
+def _print_version(value: bool) -> None:
+    if value:
+        print(f"tforge {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_print_version,
+            is_eager=True,
+            help="Show the version and exit.",
+        ),
+    ] = False,
+) -> None:
+    """Manage TicketForge tickets from the terminal."""
 
 
 def handle_errors(func: F) -> F:

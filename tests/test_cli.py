@@ -4,6 +4,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from ticketforge_cli import __version__
 from ticketforge_cli.cli import app
 
 from .conftest import BASE, workitem
@@ -19,6 +20,13 @@ def configured(tmp_path, monkeypatch):
     for var in ("TFORGE_BASE_URL", "TFORGE_USERNAME", "TFORGE_PASSWORD"):
         monkeypatch.delenv(var, raising=False)
     return path
+
+
+@pytest.mark.parametrize("flag", ["--version", "-V"])
+def test_version(flag):
+    result = runner.invoke(app, [flag])
+    assert result.exit_code == 0
+    assert result.output.strip() == f"tforge {__version__}"
 
 
 def test_unconfigured_cli_points_to_setup(tmp_path, monkeypatch):
