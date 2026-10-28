@@ -1,7 +1,6 @@
 import json
 
 import httpx
-
 import pytest
 from typer.testing import CliRunner
 
@@ -43,7 +42,9 @@ def test_setup_verifies_and_saves(tmp_path, monkeypatch, api):
 def test_setup_rejects_bad_credentials_without_saving(tmp_path, monkeypatch, api):
     path = tmp_path / "cfg.json"
     monkeypatch.setenv("TFORGE_CONFIG", str(path))
-    api.get("/workitems/mine").respond(401, json={"err": "unauthorized", "message": "valid basic auth required"})
+    api.get("/workitems/mine").respond(
+        401, json={"err": "unauthorized", "message": "valid basic auth required"}
+    )
     result = runner.invoke(app, ["setup", "-u", "alice", "-p", "bad", "--base-url", BASE])
     assert result.exit_code == 2
     assert not path.exists()
@@ -51,7 +52,10 @@ def test_setup_rejects_bad_credentials_without_saving(tmp_path, monkeypatch, api
 
 def test_list_footer_suggests_next_page(configured, api):
     api.get("/workitems/mine").respond(
-        json={"workitems": [workitem("TF-3"), workitem("TF-2")], "pagination": {"hasMore": True, "nextCursor": "c"}}
+        json={
+            "workitems": [workitem("TF-3"), workitem("TF-2")],
+            "pagination": {"hasMore": True, "nextCursor": "c"},
+        }
     )
     result = runner.invoke(app, ["list", "--limit", "2"])
     assert result.exit_code == 0, result.output
@@ -60,7 +64,9 @@ def test_list_footer_suggests_next_page(configured, api):
 
 
 def test_list_json(configured, api):
-    api.get("/workitems/mine").respond(json={"workitems": [workitem("TF-2")], "pagination": {"hasMore": False}})
+    api.get("/workitems/mine").respond(
+        json={"workitems": [workitem("TF-2")], "pagination": {"hasMore": False}}
+    )
     result = runner.invoke(app, ["list", "--json"])
     data = json.loads(result.output)
     assert data["workitems"][0]["ref"] == "TF-2"
@@ -83,7 +89,11 @@ def test_browse_lazy_navigation(monkeypatch, client, api):
         chunk = data[start : start + 5]
         more = start + 5 < len(data)
         return httpx.Response(
-            200, json={"workitems": chunk, "pagination": {"hasMore": more, **({"nextCursor": "5"} if more else {})}}
+            200,
+            json={
+                "workitems": chunk,
+                "pagination": {"hasMore": more, **({"nextCursor": "5"} if more else {})},
+            },
         )
 
     route = api.get("/workitems/mine").mock(side_effect=handler)
@@ -107,7 +117,7 @@ def test_browse_lazy_navigation(monkeypatch, client, api):
         ["TF-7", "TF-6", "TF-5"],
         ["TF-4", "TF-3", "TF-2"],
         ["TF-1"],
-        ["TF-1"],                  # n on the last page does nothing
+        ["TF-1"],  # n on the last page does nothing
         ["TF-4", "TF-3", "TF-2"],
         ["TF-7", "TF-6", "TF-5"],
     ]
@@ -128,7 +138,9 @@ def test_browse_empty(monkeypatch, client, api):
 
 
 def test_api_error_exits_nonzero(configured, api):
-    api.get("/workitem/TF-1").respond(400, json={"err": "not_found", "message": "workitem TF-1 does not exist"})
+    api.get("/workitem/TF-1").respond(
+        400, json={"err": "not_found", "message": "workitem TF-1 does not exist"}
+    )
     result = runner.invoke(app, ["show", "1"])
     assert result.exit_code == 1
     assert "workitem TF-1 does not exist" in result.output
@@ -160,11 +172,13 @@ def test_create_with_open_stage_makes_a_single_request(configured, api):
 
 
 def test_create_prompts_for_title_and_prints_json(configured, api):
-    post = api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3", title="From prompt")})
+    post = api.post("/workitem/publish").respond(
+        json={"workitem": workitem("TF-3", title="From prompt")}
+    )
     result = runner.invoke(app, ["create", "--json"], input="From prompt\n")
     assert result.exit_code == 0, result.output
     assert json.loads(post.calls.last.request.content)["title"] == "From prompt"
-    assert json.loads(result.output[result.output.index("{"):])["ref"] == "TF-3"
+    assert json.loads(result.output[result.output.index("{") :])["ref"] == "TF-3"
 
 
 # ------------------------------------------------------------------ setup / register / status
@@ -194,14 +208,18 @@ def test_register_no_save(tmp_path, monkeypatch, api):
     path = tmp_path / "cfg.json"
     monkeypatch.setenv("TFORGE_CONFIG", str(path))
     api.post("/user/register").respond(json={"ok": True})
-    result = runner.invoke(app, ["register", "-u", "bob", "-p", "pw", "--base-url", BASE, "--no-save"])
+    result = runner.invoke(
+        app, ["register", "-u", "bob", "-p", "pw", "--base-url", BASE, "--no-save"]
+    )
     assert result.exit_code == 0, result.output
     assert not path.exists()
 
 
 def test_register_duplicate_username(tmp_path, monkeypatch, api):
     monkeypatch.setenv("TFORGE_CONFIG", str(tmp_path / "cfg.json"))
-    api.post("/user/register").respond(400, json={"err": "duplicate", "message": "username already taken"})
+    api.post("/user/register").respond(
+        400, json={"err": "duplicate", "message": "username already taken"}
+    )
     result = runner.invoke(app, ["register", "-u", "bob", "-p", "pw", "--base-url", BASE])
     assert result.exit_code == 1
     assert "username already taken" in result.output
@@ -237,7 +255,9 @@ def test_status_unconfigured(tmp_path, monkeypatch):
 
 
 def test_rejected_credentials_exit_2(configured, api):
-    api.get("/workitems/mine").respond(401, json={"err": "unauthorized", "message": "valid basic auth required"})
+    api.get("/workitems/mine").respond(
+        401, json={"err": "unauthorized", "message": "valid basic auth required"}
+    )
     result = runner.invoke(app, ["list"])
     assert result.exit_code == 2
     assert "Check your credentials" in result.output
@@ -284,7 +304,9 @@ def test_list_next_hint_keeps_stage_filter(configured, api):
     )
     result = runner.invoke(app, ["list", "--stage", "review", "-n", "1"])
     assert result.exit_code == 0, result.output
-    assert "Page 1 · ticket 1 · next: tforge list --page 2 --limit 1 --stage review" in result.output
+    assert (
+        "Page 1 · ticket 1 · next: tforge list --page 2 --limit 1 --stage review" in result.output
+    )
 
 
 def test_list_empty_messages(configured, api):
@@ -318,7 +340,9 @@ def test_interactive_starts_browser_on_a_terminal(configured, monkeypatch):
     tty = SimpleNamespace(isatty=lambda: True)
     monkeypatch.setattr(cli, "sys", SimpleNamespace(stdin=tty, stdout=tty))
     calls = []
-    monkeypatch.setattr(cli, "browse", lambda pager, limit, page: calls.append((pager.stage, limit, page)))
+    monkeypatch.setattr(
+        cli, "browse", lambda pager, limit, page: calls.append((pager.stage, limit, page))
+    )
     result = runner.invoke(app, ["list", "-i", "-n", "4", "-p", "2", "--stage", "In Progress"])
     assert result.exit_code == 0, result.output
     assert calls == [("in_progress", 4, 2)]
@@ -341,7 +365,9 @@ def screen(monkeypatch):
 def seven_tickets(api):
     from .test_services import serve
 
-    api.get("/workitems/mine").mock(side_effect=serve([(f"TF-{i}", "open") for i in range(7, 0, -1)]))
+    api.get("/workitems/mine").mock(
+        side_effect=serve([(f"TF-{i}", "open") for i in range(7, 0, -1)])
+    )
 
 
 def tables(screen):
@@ -393,7 +419,11 @@ FIELDS = {"customFields": [{"id": "f1", "name": "priority", "label": "Priority",
 
 def test_show_uses_field_labels(configured, api):
     api.get("/workitem/TF-4").respond(
-        json={"workitem": workitem("TF-4", customFields={"priority": "high"}, owner={"username": "alice"})}
+        json={
+            "workitem": workitem(
+                "TF-4", customFields={"priority": "high"}, owner={"username": "alice"}
+            )
+        }
     )
     api.get("/custom-fields").respond(json=FIELDS)
     result = runner.invoke(app, ["show", "tf-4"])
@@ -412,10 +442,16 @@ def test_show_json_is_the_raw_ticket(configured, api):
 def test_update_wires_options_into_a_full_put(configured, api):
     api.get("/custom-fields").respond(json=FIELDS)
     api.get("/workitem/TF-5").respond(
-        json={"workitem": workitem("TF-5", description="keep", dependsOn=["TF-1"], customFields={"priority": "low"})}
+        json={
+            "workitem": workitem(
+                "TF-5", description="keep", dependsOn=["TF-1"], customFields={"priority": "low"}
+            )
+        }
     )
     put = api.put("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
-    result = runner.invoke(app, ["update", "5", "--clear-deps", "-f", "priority=", "--title", "New"])
+    result = runner.invoke(
+        app, ["update", "5", "--clear-deps", "-f", "priority=", "--title", "New"]
+    )
     assert result.exit_code == 0, result.output
     assert json.loads(put.calls.last.request.content) == {
         "title": "New",
@@ -445,7 +481,9 @@ def test_update_bad_field_syntax(configured, api):
     assert "expected name=value" in result.output
 
 
-@pytest.mark.parametrize(("args", "answer", "deleted"), [([], "n\n", False), ([], "y\n", True), (["--yes"], "", True)])
+@pytest.mark.parametrize(
+    ("args", "answer", "deleted"), [([], "n\n", False), ([], "y\n", True), (["--yes"], "", True)]
+)
 def test_delete_confirmation(configured, api, args, answer, deleted):
     api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
     route = api.delete("/workitem/TF-5").respond(json={})
@@ -457,7 +495,9 @@ def test_delete_confirmation(configured, api, args, answer, deleted):
 
 
 def test_delete_missing_ticket_sends_no_delete(configured, api):
-    api.get("/workitem/TF-9").respond(400, json={"err": "not_found", "message": "workitem TF-9 does not exist"})
+    api.get("/workitem/TF-9").respond(
+        400, json={"err": "not_found", "message": "workitem TF-9 does not exist"}
+    )
     route = api.delete("/workitem/TF-9")
     result = runner.invoke(app, ["delete", "TF-9", "--yes"])
     assert result.exit_code == 1
@@ -471,14 +511,18 @@ def test_fields_list_table_json_and_empty(configured, api):
     route = api.get("/custom-fields").respond(json=FIELDS)
     table = runner.invoke(app, ["fields", "list"])
     assert "priority" in table.output and "Priority" in table.output
-    assert json.loads(runner.invoke(app, ["fields", "list", "--json"]).output)[0]["name"] == "priority"
+    assert (
+        json.loads(runner.invoke(app, ["fields", "list", "--json"]).output)[0]["name"] == "priority"
+    )
 
     route.respond(json={"customFields": []})
     assert "No custom fields defined" in runner.invoke(app, ["fields", "list"]).output
 
 
 def test_fields_add(configured, api):
-    post = api.post("/custom-fields").respond(json={"customField": {"id": "f2", "name": "team", "label": "Squad"}})
+    post = api.post("/custom-fields").respond(
+        json={"customField": {"id": "f2", "name": "team", "label": "Squad"}}
+    )
     result = runner.invoke(app, ["fields", "add", "team", "--label", "Squad"])
     assert result.exit_code == 0, result.output
     assert json.loads(post.calls.last.request.content) == {"name": "team", "label": "Squad"}
@@ -487,7 +531,9 @@ def test_fields_add(configured, api):
 
 def test_fields_relabel(configured, api):
     api.get("/custom-fields").respond(json=FIELDS)
-    api.put("/custom-fields/f1").respond(json={"customField": {"id": "f1", "name": "priority", "label": "Urgency"}})
+    api.put("/custom-fields/f1").respond(
+        json={"customField": {"id": "f1", "name": "priority", "label": "Urgency"}}
+    )
     result = runner.invoke(app, ["fields", "relabel", "priority", "Urgency"])
     assert result.exit_code == 0, result.output
     assert 'now labelled "Urgency"' in result.output

@@ -48,7 +48,7 @@ $ tforge setup [OPTIONS]
 ```console
 $ tforge setup  # prompts for URL, username and password
 $ tforge setup -u alice -p 's3cret'
-$ TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars instead of a config file
+$ TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars, no config file
 ```
 
 ## `tforge register`

@@ -6,7 +6,9 @@ from .conftest import workitem
 
 
 def test_from_api_tolerates_missing_and_extra_keys():
-    item = WorkItem.from_api({"ref": "TF-1", "title": "t", "somethingNew": 1, "dependsOn": None, "customFields": None})
+    item = WorkItem.from_api(
+        {"ref": "TF-1", "title": "t", "somethingNew": 1, "dependsOn": None, "customFields": None}
+    )
     assert item.stage == "open"
     assert item.depends_on == [] and item.custom_fields == {}
     assert item.owner is None and item.created is None and item.updated is None
@@ -14,7 +16,9 @@ def test_from_api_tolerates_missing_and_extra_keys():
 
 
 def test_from_api_reads_owner_and_times():
-    item = WorkItem.from_api(workitem("TF-1", owner={"id": "u1", "username": "alice"}, dependsOn=["TF-0"]))
+    item = WorkItem.from_api(
+        workitem("TF-1", owner={"id": "u1", "username": "alice"}, dependsOn=["TF-0"])
+    )
     assert item.owner == "alice"
     assert item.depends_on == ["TF-0"]
     assert item.created == datetime(2026, 10, 28, 12, 0, tzinfo=timezone.utc)

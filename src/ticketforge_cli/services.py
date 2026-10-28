@@ -73,7 +73,9 @@ class TicketPager:
         while len(self.loaded) < count and not self.exhausted:
             chunk = self.client.list_page(limit=MAX_PAGE_SIZE, cursor=self._cursor)
             self.requests += 1
-            self.loaded.extend(w for w in chunk.items if self.stage is None or w.stage == self.stage)
+            self.loaded.extend(
+                w for w in chunk.items if self.stage is None or w.stage == self.stage
+            )
             self._cursor = chunk.next_cursor
             self.exhausted = not (chunk.has_more and chunk.next_cursor)
 

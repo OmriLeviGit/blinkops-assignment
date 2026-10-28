@@ -144,7 +144,9 @@ class TicketForgeClient:
     # ------------------------------------------------------------- endpoints
 
     def register(self, username: str, password: str) -> Any:
-        return self.request("POST", "/user/register", json={"username": username, "password": password})
+        return self.request(
+            "POST", "/user/register", json={"username": username, "password": password}
+        )
 
     def verify_credentials(self) -> None:
         self.request("GET", "/workitems/mine", params={"limit": 1})

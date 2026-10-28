@@ -246,7 +246,8 @@ def test_unparseable_retry_after_falls_back_to_backoff(client, api, sleeps):
 
 def test_malformed_rate_headers_are_ignored(client, api):
     api.get("/custom-fields").respond(
-        json={"customFields": []}, headers={"x-ratelimit-remaining": "lots", "x-ratelimit-reset": "later"}
+        json={"customFields": []},
+        headers={"x-ratelimit-remaining": "lots", "x-ratelimit-reset": "later"},
     )
     client.list_custom_fields()
     assert client.rate_remaining is None
@@ -254,7 +255,9 @@ def test_malformed_rate_headers_are_ignored(client, api):
 
 def test_on_wait_is_told_why(api):
     waits = []
-    c = TicketForgeClient(BASE, "alice", "pw", sleep=lambda s: None, on_wait=lambda s, why: waits.append(why))
+    c = TicketForgeClient(
+        BASE, "alice", "pw", sleep=lambda s: None, on_wait=lambda s, why: waits.append(why)
+    )
     api.get("/custom-fields").mock(
         side_effect=[
             httpx.Response(429, headers={"Retry-After": "0"}),
@@ -276,8 +279,12 @@ def test_get_workitem_asks_for_the_deep_view(client, api):
 
 
 def test_custom_field_endpoints(client, api):
-    created = api.post("/custom-fields").respond(json={"customField": {"id": "f1", "name": "team", "label": "Team"}})
-    updated = api.put("/custom-fields/f1").respond(json={"customField": {"id": "f1", "name": "team", "label": "Squad"}})
+    created = api.post("/custom-fields").respond(
+        json={"customField": {"id": "f1", "name": "team", "label": "Team"}}
+    )
+    updated = api.put("/custom-fields/f1").respond(
+        json={"customField": {"id": "f1", "name": "team", "label": "Squad"}}
+    )
     deleted = api.delete("/custom-fields/f1").respond(json={})
 
     assert client.create_custom_field("team", "Team").id == "f1"

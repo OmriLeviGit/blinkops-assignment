@@ -30,7 +30,12 @@ def body(route):
 
 @pytest.mark.parametrize(
     ("raw", "expected"),
-    [("open", "open"), ("In Progress", "in_progress"), ("in-progress", "in_progress"), ("CLOSED", "closed")],
+    [
+        ("open", "open"),
+        ("In Progress", "in_progress"),
+        ("in-progress", "in_progress"),
+        ("CLOSED", "closed"),
+    ],
 )
 def test_normalize_stage(raw, expected):
     assert normalize_stage(raw) == expected
@@ -84,7 +89,9 @@ def test_update_preserves_fields_the_api_would_wipe(svc, api):
 
 
 def test_update_dependency_add_remove_and_clear(svc, api):
-    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5", dependsOn=["TF-1", "TF-2"])})
+    api.get("/workitem/TF-5").respond(
+        json={"workitem": workitem("TF-5", dependsOn=["TF-1", "TF-2"])}
+    )
     put = api.put("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
 
     svc.update_ticket("TF-5", add_deps=["tf-3", "TF-1"], remove_deps=["TF-2"])
@@ -144,7 +151,9 @@ def test_update_clears_description_and_replaces_dependencies(svc, api):
 
 
 def test_update_remove_dependency_is_case_insensitive(svc, api):
-    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5", dependsOn=["TF-1", "TF-2"])})
+    api.get("/workitem/TF-5").respond(
+        json={"workitem": workitem("TF-5", dependsOn=["TF-1", "TF-2"])}
+    )
     put = api.put("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
     svc.update_ticket("TF-5", remove_deps=["tf-2"])
     assert body(put)["dependsOn"] == ["TF-1"]
@@ -202,7 +211,10 @@ def serve(data):
             200,
             json={
                 "workitems": [workitem(r, stage=s) for r, s in chunk],
-                "pagination": {"hasMore": has_more, **({"nextCursor": str(nxt)} if has_more else {})},
+                "pagination": {
+                    "hasMore": has_more,
+                    **({"nextCursor": str(nxt)} if has_more else {}),
+                },
             },
         )
 
@@ -255,8 +267,14 @@ def test_list_all(svc, api):
 
 
 def test_list_filters_stage_before_paging(svc, api):
-    data = [("TF-6", "open"), ("TF-5", "closed"), ("TF-4", "open"), ("TF-3", "closed"),
-            ("TF-2", "closed"), ("TF-1", "open")]
+    data = [
+        ("TF-6", "open"),
+        ("TF-5", "closed"),
+        ("TF-4", "open"),
+        ("TF-3", "closed"),
+        ("TF-2", "closed"),
+        ("TF-1", "open"),
+    ]
     api.get("/workitems/mine").mock(side_effect=serve(data))
 
     assert refs(svc.list_tickets(stage="closed")) == ["TF-5", "TF-3", "TF-2"]
@@ -297,8 +315,14 @@ def test_pager_knows_total_once_exhausted(svc, api):
 
 
 def test_pager_filtered_looks_ahead_for_a_match(svc, api):
-    data = [("TF-6", "closed"), ("TF-5", "open"), ("TF-4", "open"), ("TF-3", "open"),
-            ("TF-2", "open"), ("TF-1", "open")]
+    data = [
+        ("TF-6", "closed"),
+        ("TF-5", "open"),
+        ("TF-4", "open"),
+        ("TF-3", "open"),
+        ("TF-2", "open"),
+        ("TF-1", "open"),
+    ]
     route = api.get("/workitems/mine").mock(side_effect=serve(data))
     result = svc.pager("closed").page(1, 1)
     assert refs(result) == ["TF-6"] and not result.has_more
@@ -348,7 +372,9 @@ def test_relabel_rejects_empty_label(svc, api):
 
 def test_relabel_and_delete_by_id(svc, api):
     api.get("/custom-fields").respond(json=FIELDS)
-    api.put("/custom-fields/f1").respond(json={"customField": {"id": "f1", "name": "priority", "label": "P"}})
+    api.put("/custom-fields/f1").respond(
+        json={"customField": {"id": "f1", "name": "priority", "label": "P"}}
+    )
     deleted = api.delete("/custom-fields/f1").respond(json={})
     svc.relabel_field("f1", "P")
     assert svc.delete_field("f1").name == "priority"
@@ -357,7 +383,9 @@ def test_relabel_and_delete_by_id(svc, api):
 
 def test_field_list_is_cached_until_changed(svc, api):
     route = api.get("/custom-fields").respond(json=FIELDS)
-    api.post("/custom-fields").respond(json={"customField": {"id": "f2", "name": "team", "label": "Team"}})
+    api.post("/custom-fields").respond(
+        json={"customField": {"id": "f2", "name": "team", "label": "Team"}}
+    )
     svc.list_fields()
     svc.list_fields()
     assert route.call_count == 1

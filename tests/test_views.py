@@ -30,7 +30,9 @@ def test_stage_badge():
 
 
 def test_ticket_detail_uses_labels_and_shows_owner_only_when_known():
-    item = WorkItem(ref="TF-1", title="Hello", custom_fields={"priority": "high"}, depends_on=["TF-0"])
+    item = WorkItem(
+        ref="TF-1", title="Hello", custom_fields={"priority": "high"}, depends_on=["TF-0"]
+    )
     out = render(views.ticket_detail(item, {"priority": "Urgency"}))
     assert "Urgency" in out and "high" in out and "TF-0" in out
     assert "No description" in out

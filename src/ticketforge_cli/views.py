@@ -48,7 +48,13 @@ def ticket_table(items: list[WorkItem], title: str | None = None) -> Table:
     table.add_column("Description", style="dim", overflow="ellipsis")
     table.add_column("Updated", style="dim", no_wrap=True)
     for item in items:
-        table.add_row(item.ref, stage_badge(item.stage), item.title, _excerpt(item.description), _when(item.updated))
+        table.add_row(
+            item.ref,
+            stage_badge(item.stage),
+            item.title,
+            _excerpt(item.description),
+            _when(item.updated),
+        )
     return table
 
 
@@ -61,7 +67,9 @@ def ticket_detail(item: WorkItem, labels: dict[str, str] | None = None) -> Panel
     grid.add_row("Description", item.description or Text("No description", style="dim italic"))
     grid.add_row(
         "Depends on",
-        Text(", ".join(item.depends_on), style="blue") if item.depends_on else Text("-", style="dim"),
+        Text(", ".join(item.depends_on), style="blue")
+        if item.depends_on
+        else Text("-", style="dim"),
     )
     for name, value in item.custom_fields.items():
         grid.add_row(labels.get(name, name), value)
@@ -69,7 +77,9 @@ def ticket_detail(item: WorkItem, labels: dict[str, str] | None = None) -> Panel
         grid.add_row("Owner", item.owner)
     grid.add_row("Created", _when(item.created))
     grid.add_row("Updated", _when(item.updated))
-    return Panel(grid, title=f"[bold blue]{item.ref}[/] {item.title}", title_align="left", expand=False)
+    return Panel(
+        grid, title=f"[bold blue]{item.ref}[/] {item.title}", title_align="left", expand=False
+    )
 
 
 def fields_table(fields: list[CustomField]) -> Table:
@@ -89,10 +99,7 @@ def print_json(data: Any) -> None:
             return obj.isoformat()
         raise TypeError(type(obj).__name__)
 
-    if isinstance(data, list):
-        data = [_jsonable(d) for d in data]
-    else:
-        data = _jsonable(data)
+    data = [_jsonable(d) for d in data] if isinstance(data, list) else _jsonable(data)
     print(json.dumps(data, indent=2, default=default))
 
 

@@ -5,7 +5,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def load_generator():
-    spec = importlib.util.spec_from_file_location("gen_cli_docs", ROOT / "scripts" / "gen_cli_docs.py")
+    spec = importlib.util.spec_from_file_location(
+        "gen_cli_docs", ROOT / "scripts" / "gen_cli_docs.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
