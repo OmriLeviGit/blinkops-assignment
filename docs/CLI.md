@@ -97,7 +97,7 @@ $ tforge status [OPTIONS]
 
 ```console
 $ tforge status
-$ cp .env.example .env && tforge status  # credentials from ./.env
+$ TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars, no config file
 ```
 
 ## `tforge list`

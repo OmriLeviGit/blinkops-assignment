@@ -75,36 +75,18 @@ def test_save_tightens_permissions_of_an_existing_file(tmp_path):
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
-def test_dotenv_overrides_file_and_env_overrides_dotenv(tmp_path, monkeypatch):
+def test_env_vars_override_file_and_are_labelled(tmp_path, monkeypatch):
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"username": "file-user", "password": "file-pw"}))
-    env_file = tmp_path / ".env"
-    env_file.write_text("TFORGE_USERNAME=dotenv-user\nTFORGE_PASSWORD='dotenv pw'\n")
     monkeypatch.setenv("TFORGE_PASSWORD", "env-pw")
-    cfg = load_config(path, env_file=env_file)
-    assert (cfg.username, cfg.password) == ("dotenv-user", "env-pw")
-    assert cfg.sources == {"username": ".env", "password": "environment"}
-
-
-def test_empty_dotenv_values_are_ignored(tmp_path):
-    path = tmp_path / "config.json"
-    path.write_text(json.dumps({"username": "file-user", "password": "file-pw"}))
-    env_file = tmp_path / ".env"
-    env_file.write_text("TFORGE_USERNAME=\nTFORGE_PASSWORD=\n")  # an unfilled .env.example
-    cfg = load_config(path, env_file=env_file)
-    assert (cfg.username, cfg.password) == ("file-user", "file-pw")
-    assert cfg.sources == {}
-
-
-def test_dotenv_is_read_from_the_current_directory(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / ".env").write_text("TFORGE_USERNAME=u\nTFORGE_PASSWORD=p\n")
-    assert load_config(tmp_path / "missing.json").is_complete
+    cfg = load_config(path)
+    assert (cfg.username, cfg.password) == ("file-user", "env-pw")
+    assert cfg.sources == {"password": "environment"}
 
 
 def test_save_does_not_write_sources(tmp_path):
     path = tmp_path / "config.json"
-    save_config(Config(username="u", password="p", sources={"username": ".env"}), path)
+    save_config(Config(username="u", password="p", sources={"username": "environment"}), path)
     assert set(json.loads(path.read_text())) == {"base_url", "username", "password"}
 
 

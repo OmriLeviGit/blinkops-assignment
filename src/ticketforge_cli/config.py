@@ -1,6 +1,6 @@
 """Saved configuration with environment-variable overrides.
 
-Precedence: environment variables > `.env` in the current directory > config file > defaults.
+Precedence: environment variables > config file > defaults.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
-from dotenv import dotenv_values
 
 from .errors import ConfigError, ValidationError
 
@@ -23,15 +22,13 @@ ENV_USERNAME = "TFORGE_USERNAME"
 ENV_PASSWORD = "TFORGE_PASSWORD"
 ENV_CONFIG_PATH = "TFORGE_CONFIG"
 
-ENV_FILE = Path(".env")
-
 
 @dataclass
 class Config:
     base_url: str = DEFAULT_BASE_URL
     username: str | None = None
     password: str | None = None
-    # Where each overridden setting came from ("environment" or ".env"); not saved.
+    # Settings overridden by an environment variable ("environment"); not saved.
     sources: dict[str, str] = field(default_factory=dict, compare=False)
 
     @property
@@ -57,7 +54,7 @@ def validate_base_url(url: str) -> str:
     return url.rstrip("/")
 
 
-def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
+def load_config(path: Path | None = None) -> Config:
     path = path or config_path()
     cfg = Config()
     if path.exists():
@@ -75,7 +72,6 @@ def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
             password=data.get("password"),
         )
 
-    dotenv = dotenv_values(env_file) if env_file.is_file() else {}
     for attr, var in (
         ("base_url", ENV_BASE_URL),
         ("username", ENV_USERNAME),
@@ -83,11 +79,7 @@ def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
     ):
         if value := os.environ.get(var):
             cfg.sources[attr] = "environment"
-        elif value := dotenv.get(var):
-            cfg.sources[attr] = ".env"
-        else:
-            continue
-        setattr(cfg, attr, value)
+            setattr(cfg, attr, value)
     try:
         cfg.base_url = validate_base_url(cfg.base_url)
     except ValidationError as exc:

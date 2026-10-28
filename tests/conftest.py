@@ -16,7 +16,7 @@ API = BASE + "/api/tforge"
 
 @pytest.fixture(autouse=True)
 def isolated_env(monkeypatch, tmp_path):
-    """Keep the caller's TicketForge settings (env vars and ./.env) out of the tests."""
+    """Keep the caller's TicketForge settings (env vars) out of the tests."""
     for var in ("TFORGE_BASE_URL", "TFORGE_USERNAME", "TFORGE_PASSWORD", "TFORGE_CONFIG"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.chdir(tmp_path)

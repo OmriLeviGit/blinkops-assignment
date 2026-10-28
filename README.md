@@ -105,25 +105,18 @@ tforge setup
 tforge status
 ```
 
-`setup` prompts for a username and password, verifies them and saves the config. If the login
-fails (no such account yet), it offers to create the account. It connects to the assignment's
-TicketForge server; pass `--base-url` (or set `TFORGE_BASE_URL`) to use another one. To create another account
-later and switch to it, run `tforge register`. `status` shows the config, checks the credentials
-and shows the rate-limit quota.
+`setup` prompts for a username and password, verifies them and saves them to
+`~/.config/ticketforge/config.json` (readable only by you). If the login fails (no such account
+yet), it offers to create the account. To create another account later and switch to it, run
+`tforge register`. `status` shows the config, checks the credentials and shows the rate-limit
+quota.
 
-`setup` saves to `~/.config/ticketforge/config.json` (mode `0600`). Instead of a saved config,
-you can use a `.env` file in the directory you run `tforge` from:
+`tforge` connects to the assignment's TicketForge server. To use another one, pass `--base-url` to
+`setup`.
 
-```bash
-cp .env.example .env
-tforge status
-```
-
-Fill in `TFORGE_USERNAME` and `TFORGE_PASSWORD` (`.env` is git-ignored). `status` shows where each
-setting came from, e.g. "alice (from .env)".
-
-Precedence: environment variables > `./.env` > saved config. The variables are `TFORGE_USERNAME`,
-`TFORGE_PASSWORD`, `TFORGE_BASE_URL` and `TFORGE_CONFIG` (config path).
+For scripts and CI, environment variables override the saved config: `TFORGE_USERNAME`,
+`TFORGE_PASSWORD`, `TFORGE_BASE_URL`, and `TFORGE_CONFIG` (config file path). `status` marks
+any setting that came from one.
 
 ## Usage
 
@@ -210,7 +203,7 @@ src/ticketforge_cli/
 
 ## Assumptions and limitations
 
-- **The password is stored in plaintext** (in a `0600` config file, or your `.env`), because the
+- **The password is stored in plaintext** (in a `0600` config file), because the
   API only supports Basic auth. Export the environment variables to avoid writing it to disk.
 - **Deep pages cost requests.** The API returns 5 tickets per request with no offset, so
   `--page N` steps through every earlier page (about N×limit/5 requests, against 50 per minute).

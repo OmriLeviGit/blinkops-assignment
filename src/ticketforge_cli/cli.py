@@ -27,10 +27,7 @@ app.add_typer(fields_app, name="fields")
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-SETUP_HINT = (
-    "Run `tforge setup`, or set TFORGE_USERNAME and TFORGE_PASSWORD in a .env file"
-    " (see .env.example)."
-)
+SETUP_HINT = "Run `tforge setup`, or set TFORGE_USERNAME and TFORGE_PASSWORD."
 
 JsonOpt = Annotated[bool, typer.Option("--json", help="Print raw JSON instead of tables.")]
 
@@ -245,7 +242,7 @@ def _source(cfg: Config, attr: str) -> str:
 @app.command(
     epilog=examples(
         "tforge status",
-        "cp .env.example .env && tforge status  # credentials from ./.env",
+        "TFORGE_USERNAME=alice TFORGE_PASSWORD=s3cret tforge status  # env vars, no config file",
     )
 )
 @handle_errors
