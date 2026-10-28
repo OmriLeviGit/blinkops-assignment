@@ -642,9 +642,10 @@ def test_fields_delete_confirmation(configured, api, args, answer, deleted):
 
 def test_fields_delete_unknown(configured, api):
     api.get("/custom-fields").respond(json=FIELDS)
-    result = runner.invoke(app, ["fields", "delete", "nope", "--yes"])
+    result = runner.invoke(app, ["fields", "delete", "nope"])
     assert result.exit_code == 1
     assert "custom field 'nope' not found" in result.output
+    assert "Delete field" not in result.output  # no confirmation for a field that isn't there
 
 
 MARKUP = "fix [/] bug [red]x"
