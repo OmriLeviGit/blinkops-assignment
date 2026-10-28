@@ -157,7 +157,7 @@ def list_tickets(
         if not result.items and page_no == 1:
             views.console.print("No tickets found.")
             return
-        views.console.print(views.ticket_table(result.items, title=None if all_ else f"Page {page_no}"))
+        views.console.print(views.ticket_table(result.items, title=f"Page {page_no}" if interactive else None))
         if not result.has_more:
             return
         if not interactive:

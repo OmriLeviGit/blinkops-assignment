@@ -39,6 +39,7 @@ class WorkItem:
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> WorkItem:
         owner = data.get("owner")
+        created = _parse_time(data.get("created"))
         return cls(
             ref=str(data.get("ref", "")),
             title=str(data.get("title", "")),
@@ -47,8 +48,9 @@ class WorkItem:
             depends_on=list(data.get("dependsOn") or []),
             custom_fields=dict(data.get("customFields") or {}),
             owner=owner.get("username") if isinstance(owner, dict) else None,
-            created=_parse_time(data.get("created")),
-            updated=_parse_time(data.get("updated")),
+            created=created,
+            # The create endpoint omits `updated`; a new ticket was last updated when created.
+            updated=_parse_time(data.get("updated")) or created,
             raw=data,
         )
 
