@@ -72,6 +72,16 @@ def test_setup_rejects_bad_credentials_without_saving(tmp_path, monkeypatch, api
     assert not path.exists()
 
 
+def test_setup_refuses_a_url_that_is_not_ticketforge(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    api.get("/workitems/mine").respond(200, text="<html>some web app</html>")
+    result = runner.invoke(app, ["setup", "-u", "alice", "-p", "pw", "--base-url", BASE])
+    assert result.exit_code == 1
+    assert "unexpected response" in result.output
+    assert not path.exists()
+
+
 def test_list_footer_suggests_next_page(configured, api):
     api.get("/workitems/mine").respond(
         json={
