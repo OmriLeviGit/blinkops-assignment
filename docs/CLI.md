@@ -169,7 +169,7 @@ $ tforge create [OPTIONS] [title]
 
 **Arguments**:
 
-* `title`: Ticket title (prompted if omitted).
+* `title`: Ticket title. Omit it to be asked for each field.
 
 **Options**:
 
@@ -183,6 +183,7 @@ $ tforge create [OPTIONS] [title]
 **Examples**:
 
 ```console
+$ tforge create  # asks for each field
 $ tforge create "Fix login redirect"
 $ tforge create "Write release notes" -d "Cover the new CLI" -s in_progress
 $ tforge create "Ship v2" --dep TF-12 --dep TF-13 -f priority=high

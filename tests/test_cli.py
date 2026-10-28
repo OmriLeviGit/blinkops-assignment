@@ -197,7 +197,8 @@ def test_create_prompts_for_title_and_prints_json(configured, api):
     post = api.post("/workitem/publish").respond(
         json={"workitem": workitem("TF-3", title="From prompt")}
     )
-    result = runner.invoke(app, ["create", "--json"], input="From prompt\n")
+    api.get("/custom-fields").respond(json={"customFields": []})
+    result = runner.invoke(app, ["create", "--json"], input="From prompt\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert json.loads(post.calls.last.request.content)["title"] == "From prompt"
     assert json.loads(result.output[result.output.index("{") :])["ref"] == "TF-3"
@@ -729,3 +730,42 @@ def test_create_reports_ticket_when_stage_update_fails(configured, api, monkeypa
     assert result.exit_code == (130 if interrupted else 1)
     assert "Created TF-3, but its stage wasn't set" in result.output
     assert "tforge update TF-3 -s review" in result.output
+
+
+def test_create_guided_asks_for_each_field(configured, api):
+    api.get("/custom-fields").respond(json=FIELDS)
+    post = api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    api.get("/workitem/TF-3").respond(json={"workitem": workitem("TF-3")})
+    put = api.put("/workitem/TF-3").respond(json={"workitem": workitem("TF-3", stage="review")})
+    answers = ["Ship v2", "Release notes", "nope", "review", "TF-1, x", "1, 2", "high"]
+    result = runner.invoke(app, ["create"], input="\n".join(answers) + "\n")
+    assert result.exit_code == 0, result.output
+    for prompt in ("Title", "Description (optional)", "Stage [open]", "Depends on", "Priority"):
+        assert prompt in result.output
+    assert "invalid stage 'nope'" in result.output
+    assert "invalid ref 'x'" in result.output
+    assert json.loads(post.calls.last.request.content) == {
+        "title": "Ship v2",
+        "description": "Release notes",
+        "dependsOn": ["TF-1", "TF-2"],
+        "customFields": {"priority": "high"},
+    }
+    assert json.loads(put.calls.last.request.content)["stage"] == "review"
+
+
+def test_create_guided_skips_prompts_for_given_options(configured, api):
+    api.get("/custom-fields").respond(json={"customFields": []})
+    post = api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    result = runner.invoke(app, ["create", "-d", "Given", "--dep", "TF-1"], input="T\n\n")
+    assert result.exit_code == 0, result.output
+    assert "Description (optional)" not in result.output
+    assert "Depends on (refs" not in result.output
+    assert json.loads(post.calls.last.request.content)["description"] == "Given"
+
+
+def test_create_guided_requires_a_title(configured, api):
+    api.get("/custom-fields").respond(json={"customFields": []})
+    api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    result = runner.invoke(app, ["create"], input="  \nReal\n\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert "a value is required" in result.output

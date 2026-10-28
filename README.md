@@ -153,6 +153,7 @@ appears once the end of the list is reached, because the API has no count endpoi
 ### Create and update
 
 ```bash
+tforge create                      # asks for each field, one at a time
 tforge create "Ship v2" -d "Release" -s in_progress --dep TF-12 -f priority=high
 tforge update TF-12 -s review
 tforge update TF-12 -t "New title" -d ''
@@ -160,6 +161,8 @@ tforge update TF-12 --add-dep TF-3 --remove-dep TF-4
 tforge update TF-12 -f priority=low -f team=
 ```
 
+Without a title, `create` asks for the title, description, stage, dependencies and each custom
+field in turn (Enter skips the optional ones); options you did pass aren't asked again.
 `update` changes only the fields you pass. An empty value clears it: `-d ''` clears the
 description, `-f team=` unsets the `team` field.
 

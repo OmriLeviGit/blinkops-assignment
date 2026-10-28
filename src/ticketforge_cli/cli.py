@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import re
 import shlex
 import sys
 from collections.abc import Callable
@@ -15,7 +16,13 @@ from . import __version__, views
 from .client import TicketForgeClient
 from .config import Config, config_path, load_config, save_config, validate_base_url
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
-from .services import TicketPager, TicketService, normalize_stage, parse_field_assignments
+from .services import (
+    TicketPager,
+    TicketService,
+    normalize_ref,
+    normalize_stage,
+    parse_field_assignments,
+)
 
 app = typer.Typer(
     help="Manage TicketForge tickets from the terminal.",
@@ -269,6 +276,33 @@ def status() -> None:
 # ------------------------------------------------------------------ tickets
 
 
+def _ask(
+    prompt: str, default: str | None = "", check: Callable[[str], object] | None = None
+) -> str:
+    """Prompt until the answer passes `check`. `default=None` makes the answer required."""
+    while True:
+        value = str(typer.prompt(prompt, default=default or "", show_default=bool(default))).strip()
+        if not value and default is None:
+            views.error("a value is required")
+            continue
+        try:
+            if check and value:
+                check(value)
+        except ValidationError as exc:
+            views.error(exc.message)
+            continue
+        return value
+
+
+def _split_refs(value: str) -> list[str]:
+    return [r for r in re.split(r"[,\s]+", value) if r]
+
+
+def _check_refs(value: str) -> None:
+    for ref in _split_refs(value):
+        normalize_ref(ref)
+
+
 @app.command(
     "list",
     epilog=examples(
@@ -417,6 +451,7 @@ def show(
 
 @app.command(
     epilog=examples(
+        "tforge create  # asks for each field",
         'tforge create "Fix login redirect"',
         'tforge create "Write release notes" -d "Cover the new CLI" -s in_progress',
         'tforge create "Ship v2" --dep TF-12 --dep TF-13 -f priority=high',
@@ -424,7 +459,9 @@ def show(
 )
 @handle_errors
 def create(
-    title: Annotated[str | None, typer.Argument(help="Ticket title (prompted if omitted).")] = None,
+    title: Annotated[
+        str | None, typer.Argument(help="Ticket title. Omit it to be asked for each field.")
+    ] = None,
     description: Annotated[
         str | None, typer.Option("--description", "-d", help="Ticket description.")
     ] = None,
@@ -444,7 +481,23 @@ def create(
     # Validate up front: the stage is applied by a second request, after the ticket exists.
     stage = normalize_stage(stage) if stage else None
     svc = get_service()
-    title = title or typer.prompt("Title")
+    if title is None:
+        # Guided mode: ask for everything that wasn't passed as an option.
+        title = _ask("Title", default=None)
+        if description is None:
+            description = _ask("Description (optional)")
+        if stage is None:
+            stage = normalize_stage(_ask("Stage", default="open", check=normalize_stage))
+        if not depends_on:
+            depends_on = _split_refs(
+                _ask("Depends on (refs, comma-separated, optional)", check=_check_refs)
+            )
+        if not field:
+            field = [
+                f"{f.name}={value}"
+                for f in svc.list_fields()
+                if (value := _ask(f"{f.label} (optional)"))
+            ]
     ticket = svc.create_ticket(
         title,
         description=description,
