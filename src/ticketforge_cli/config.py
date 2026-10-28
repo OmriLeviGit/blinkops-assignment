@@ -10,9 +10,10 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import httpx
 from dotenv import dotenv_values
 
-from .errors import ConfigError
+from .errors import ConfigError, ValidationError
 
 DEFAULT_BASE_URL = "https://integrations-assignment-ticketforge.vercel.app"
 
@@ -44,6 +45,17 @@ def config_path() -> Path:
     return Path(base) / "ticketforge" / "config.json"
 
 
+def validate_base_url(url: str) -> str:
+    """Return `url` without a trailing slash, or raise if it isn't an http(s) URL."""
+    try:
+        parsed: httpx.URL | None = httpx.URL(url)
+    except httpx.InvalidURL:
+        parsed = None
+    if parsed is None or parsed.scheme not in ("http", "https") or not parsed.host:
+        raise ValidationError(f"invalid URL '{url}', expected http:// or https://")
+    return url.rstrip("/")
+
+
 def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
     path = path or config_path()
     cfg = Config()
@@ -52,6 +64,10 @@ def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
             data = json.loads(path.read_text())
         except (OSError, json.JSONDecodeError) as exc:
             raise ConfigError(f"could not read config file {path}: {exc}") from exc
+        if not isinstance(data, dict) or not all(
+            isinstance(data.get(k), (str, type(None))) for k in ("base_url", "username", "password")
+        ):
+            raise ConfigError(f"config file {path} is malformed; run `tforge setup` to rewrite it")
         cfg = Config(
             base_url=data.get("base_url") or DEFAULT_BASE_URL,
             username=data.get("username"),
@@ -71,6 +87,11 @@ def load_config(path: Path | None = None, env_file: Path = ENV_FILE) -> Config:
         else:
             continue
         setattr(cfg, attr, value)
+    try:
+        cfg.base_url = validate_base_url(cfg.base_url)
+    except ValidationError as exc:
+        where = cfg.sources.get("base_url", f"config file {path}")
+        raise ConfigError(f"{exc.message} (from {where})") from None
     return cfg
 
 

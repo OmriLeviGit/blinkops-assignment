@@ -656,3 +656,39 @@ def test_markup_in_username_is_shown_literally(tmp_path, monkeypatch, api):
     result = runner.invoke(app, ["setup", "-u", "a[/]b", "-p", "pw", "--base-url", BASE])
     assert result.exit_code == 0, result.output
     assert "as a[/]b." in result.output
+
+
+def test_bad_ref_is_rejected_before_any_request(configured, api):
+    result = runner.invoke(app, ["show", "1/../../custom-fields"])
+    assert result.exit_code == 1
+    assert "invalid ref" in result.output
+    assert not api.calls
+
+
+def test_bad_dep_is_rejected_before_any_request(configured, api):
+    result = runner.invoke(app, ["create", "Hello", "--dep", "nope"])
+    assert result.exit_code == 1
+    assert "invalid ref 'nope'" in result.output
+    assert not api.calls
+
+
+def test_setup_rejects_bad_url_and_blank_username(tmp_path, monkeypatch, api):
+    monkeypatch.setenv("TFORGE_CONFIG", str(tmp_path / "cfg.json"))
+    result = runner.invoke(app, ["setup", "--base-url", "example.com", "-u", "a", "-p", "b"])
+    assert result.exit_code == 1
+    assert "invalid URL 'example.com'" in result.output
+    result = runner.invoke(app, ["setup", "--base-url", BASE, "-u", "  ", "-p", "b"])
+    assert result.exit_code == 1
+    assert "username must not be empty" in result.output
+    assert not api.calls
+
+
+def test_setup_repairs_a_malformed_config(tmp_path, monkeypatch, api):
+    path = tmp_path / "cfg.json"
+    path.write_text("[]")
+    monkeypatch.setenv("TFORGE_CONFIG", str(path))
+    assert runner.invoke(app, ["status"]).exit_code == 2
+    api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {}})
+    result = runner.invoke(app, ["setup", "--base-url", BASE, "-u", "alice", "-p", "pw"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(path.read_text())["username"] == "alice"

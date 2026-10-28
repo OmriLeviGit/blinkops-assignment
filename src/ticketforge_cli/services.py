@@ -17,6 +17,7 @@ from .errors import NotFoundError, ValidationError
 from .models import STAGES, CustomField, WorkItem
 
 FIELD_NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
+REF_RE = re.compile(r"^TF-\d+$")
 
 
 @dataclass
@@ -36,6 +37,8 @@ def normalize_ref(value: str) -> str:
     ref = value.strip().upper()
     if ref.isdigit():
         ref = f"TF-{ref}"
+    if not REF_RE.match(ref):
+        raise ValidationError(f"invalid ref '{value}', expected TF-<number> or <number>")
     return ref
 
 

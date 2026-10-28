@@ -13,7 +13,7 @@ from rich.markup import escape
 
 from . import __version__, views
 from .client import TicketForgeClient
-from .config import Config, config_path, load_config, save_config
+from .config import Config, config_path, load_config, save_config, validate_base_url
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
 from .services import TicketPager, TicketService, normalize_stage, parse_field_assignments
 
@@ -128,13 +128,15 @@ def setup(
 
     If the login fails, offers to create the account.
     """
-    current = load_config()
-    base_url = base_url or current.base_url
-    username = username or typer.prompt("Username", default=current.username or None)
+    current = _current_config()
+    base_url = validate_base_url(base_url.strip()) if base_url else current.base_url
+    username = _clean_username(
+        username or typer.prompt("Username", default=current.username or None)
+    )
     password_prompted = password is None
     password = password or typer.prompt("Password", hide_input=True)
 
-    cfg = Config(base_url=base_url.rstrip("/"), username=username, password=password)
+    cfg = Config(base_url=base_url, username=username, password=password)
     with make_client(cfg) as client:
         try:
             client.verify_credentials()
@@ -151,6 +153,21 @@ def setup(
         f"Connected to {escape(cfg.base_url)} as [bold]{escape(username)}[/]."
         f" Config saved to {escape(str(path))}"
     )
+
+
+def _current_config() -> Config:
+    """The current config, or defaults if it is broken (setup is how you fix it)."""
+    try:
+        return load_config()
+    except ConfigError:
+        return Config()
+
+
+def _clean_username(value: str) -> str:
+    username = value.strip()
+    if not username:
+        raise ValidationError("username must not be empty")
+    return username
 
 
 def _confirm(question: str) -> bool:
@@ -196,8 +213,8 @@ def register(
     ] = True,
 ) -> None:
     """Create a new TicketForge account and switch to it."""
-    base_url = (base_url or load_config().base_url).rstrip("/")
-    username = username or typer.prompt("Username")
+    base_url = validate_base_url(base_url.strip()) if base_url else _current_config().base_url
+    username = _clean_username(username or typer.prompt("Username"))
     password = password or typer.prompt("Password", hide_input=True, confirmation_prompt=True)
     with make_client(Config(base_url=base_url), auth=False) as client:
         client.register(username, password)

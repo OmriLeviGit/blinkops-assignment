@@ -46,6 +46,12 @@ def test_normalize_stage_rejects_unknown():
         normalize_stage("done")
 
 
+@pytest.mark.parametrize("ref", ["abc", "TF-", "TF-1/../x", "1 2", ""])
+def test_normalize_ref_rejects_garbage(ref):
+    with pytest.raises(ValidationError, match="invalid ref"):
+        normalize_ref(ref)
+
+
 def test_normalize_ref():
     assert normalize_ref("tf-12") == "TF-12"
     assert normalize_ref("12") == "TF-12"

@@ -3,7 +3,14 @@ import stat
 
 import pytest
 
-from ticketforge_cli.config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
+from ticketforge_cli.config import (
+    DEFAULT_BASE_URL,
+    Config,
+    config_path,
+    load_config,
+    save_config,
+    validate_base_url,
+)
 from ticketforge_cli.errors import ConfigError
 
 
@@ -99,3 +106,22 @@ def test_save_does_not_write_sources(tmp_path):
     path = tmp_path / "config.json"
     save_config(Config(username="u", password="p", sources={"username": ".env"}), path)
     assert set(json.loads(path.read_text())) == {"base_url", "username", "password"}
+
+
+@pytest.mark.parametrize("content", ["[]", '"x"', '{"username": 5}', '{"password": true}'])
+def test_malformed_config_file(tmp_path, content):
+    path = tmp_path / "c.json"
+    path.write_text(content)
+    with pytest.raises(ConfigError, match="malformed"):
+        load_config(path)
+
+
+@pytest.mark.parametrize("url", ["example.com", "ftp://example.com", "http://"])
+def test_invalid_base_url_names_its_source(tmp_path, monkeypatch, url):
+    monkeypatch.setenv("TFORGE_BASE_URL", url)
+    with pytest.raises(ConfigError, match=r"invalid URL .*\(from environment\)"):
+        load_config(tmp_path / "missing.json")
+
+
+def test_validate_base_url_strips_trailing_slash():
+    assert validate_base_url("https://tf.test/") == "https://tf.test"
