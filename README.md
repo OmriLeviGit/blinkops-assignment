@@ -205,7 +205,8 @@ tforge fields relabel priority Urgency
 
 ### Exit codes
 
-`0` success · `1` API or validation error · `2` not configured or bad credentials
+`0` success · `1` API or validation error · `2` not configured, bad credentials, or a bad
+option · `130` interrupted (Ctrl-C)
 
 ## Development
 
