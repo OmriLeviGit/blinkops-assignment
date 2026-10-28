@@ -1,0 +1,33 @@
+$ tforge setup -u tforge-smoke-1793190535 -p wrong-password --base-url https://integrations-assignment-ticketforge.vercel.app
+Error: valid basic auth required
+Check your credentials with `tforge setup`.
+[exit 2]
+
+$ tforge setup -u tforge-smoke-1793190535 -p smoke-pass-123 --base-url https://integrations-assignment-ticketforge.vercel.app
+✓ Connected as tforge-smoke-1793190535. Config saved to /home/omri/.config/ticketforge/config.json
+[exit 0]
+
+$ ls -l ~/.config/ticketforge/config.json
+-rw------- 1 omri omri 147 Oct 28 14:30 /home/omri/.config/ticketforge/config.json
+
+$ tforge status
+Config file: /home/omri/.config/ticketforge/config.json
+URL:         https://integrations-assignment-ticketforge.vercel.app
+Username:    tforge-smoke-1793190535
+✓ Credentials OK
+Rate limit:  48/50 requests left in this window
+[exit 0]
+
+$ TFORGE_CONFIG=/nonexistent.json TFORGE_USERNAME=… TFORGE_PASSWORD=… tforge status
+Config file: /nonexistent.json
+URL:         https://integrations-assignment-ticketforge.vercel.app
+Username:    tforge-smoke-1793190535
+✓ Credentials OK
+Rate limit:  47/50 requests left in this window
+[exit 0]
+
+$ TFORGE_CONFIG=/nonexistent.json tforge list
+Error: TicketForge is not configured
+Run `tforge setup` first.
+[exit 2]
+

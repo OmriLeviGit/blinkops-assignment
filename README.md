@@ -44,6 +44,18 @@ pip install -e .            # or: pip install -e '.[dev]' to run the tests
 tforge --help
 ```
 
+### Tested on
+
+- Windows 11 Pro (build 26300) with WSL2 2.5.9, Ubuntu 24.04.2 LTS, kernel 6.6.87.2
+- Python 3.12.3 in a venv, bash
+- Starting from a fresh `git clone` and following the steps above: 54/54 tests passed, and every
+  command in this README was run against the live API (2026-10-28). The recorded output and
+  screenshots are in [docs/evidence/](docs/evidence/README.md).
+
+It's plain Python with no native dependencies, so it should also work on Linux and macOS
+(not tested). The interactive browser (`list -i`) needs a real terminal (TTY). In the WSL2
+terminal, single-key navigation works without pressing Enter.
+
 ## Setup
 
 Use an existing TicketForge account, or create one with `tforge register`.
@@ -153,7 +165,7 @@ Custom fields are per-user, text-valued attributes such as priority or team.
 tforge fields list
 tforge fields add priority --label Priority
 tforge fields relabel priority "Urgency"
-tforge fields delete priority          # also removes its values from all tickets
+tforge fields delete priority          # asks first (--yes to skip); also removes its values from all tickets
 ```
 
 ### Exit codes
@@ -177,6 +189,7 @@ src/ticketforge_cli/
 └── config.py     # config file + env overrides
 docs/API.md       # reverse-engineered API reference
 docs/demo.md      # recorded run against the live API
+docs/evidence/    # fresh-clone walkthrough: outputs + screenshots
 tests/            # pytest + respx (mocked HTTP)
 ```
 

@@ -1,0 +1,37 @@
+$ git clone https://github.com/OmriLeviGit/blinkops-assignment.git && cd blinkops-assignment
+$ python3 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]"
+
+$ git log --oneline -1
+8b75b10 docs: update pagination docs and demo; note the API has no offset access
+$ python3 --version
+Python 3.12.3
+$ pytest -q
+......................................................                                                 [100%]
+54 passed in 0.60s
+
+$ tforge --help
+                                                                                                              
+ Usage: tforge [OPTIONS] COMMAND [ARGS]...                                                                    
+                                                                                                              
+ Manage TicketForge tickets from the terminal.                                                                
+                                                                                                              
+╭─ Options ──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --install-completion          Install completion for the current shell.                                    │
+│ --show-completion             Show completion for the current shell, to copy it or customize the           │
+│                               installation.                                                                │
+│ --help                        Show this message and exit.                                                  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ─────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ setup     Configure and verify the connection to TicketForge.                                              │
+│ register  Create a new TicketForge account.                                                                │
+│ status    Show the active configuration and check the connection.                                          │
+│ list      List your tickets, newest first.                                                                 │
+│ show      Show a single ticket in full.                                                                    │
+│ create    Create a ticket.                                                                                 │
+│ update    Update a ticket. Only the options you pass are changed.                                          │
+│ delete    Delete a ticket. Other tickets' dependencies on it are removed too.                              │
+│ fields    Manage custom field definitions.                                                                 │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+[exit 0]
+

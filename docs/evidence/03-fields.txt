@@ -1,0 +1,68 @@
+$ tforge fields list
+┏━━━━━━━━━━┳━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Name     ┃ Label   ┃ Type ┃ ID                        ┃
+┡━━━━━━━━━━╇━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ priority │ Urgency │ text │ cmvs3crev0026m47h9radcvn6 │
+│ team     │ Team    │ text │ cmvs3cs180028m47h29k6ozir │
+└──────────┴─────────┴──────┴───────────────────────────┘
+[exit 0]
+
+$ tforge fields relabel priority Urgency
+✓ Field priority is now labelled "Urgency"
+[exit 0]
+
+$ tforge show TF-629
+╭─ TF-629 Ship v2.0 ───────────────────╮
+│ Stage        in progress             │
+│ Description  No description          │
+│ Depends on   -                       │
+│ Urgency      low                     │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:31        │
+│ Updated      2026-10-28 14:32        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ tforge fields relabel nope X
+Error: custom field 'nope' not found
+[exit 1]
+
+$ tforge fields delete team --yes
+✓ Deleted field team
+[exit 0]
+
+$ tforge fields delete priority --yes
+✓ Deleted field priority
+[exit 0]
+
+$ tforge show TF-629
+╭─ TF-629 Ship v2.0 ───────────────────╮
+│ Stage        in progress             │
+│ Description  No description          │
+│ Depends on   -                       │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:31        │
+│ Updated      2026-10-28 14:32        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ tforge fields list
+No custom fields defined. Add one with `tforge fields add NAME`.
+[exit 0]
+
+$ tforge fields add priority --label Priority
+✓ Added field priority (Priority)
+[exit 0]
+
+$ tforge fields add priority
+Error: a custom field with this name already exists for your account
+[exit 1]
+
+$ tforge fields list
+┏━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Name     ┃ Label    ┃ Type ┃ ID                        ┃
+┡━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ priority │ Priority │ text │ cmvs3hrd60048m47hqece65f2 │
+└──────────┴──────────┴──────┴───────────────────────────┘
+[exit 0]
+

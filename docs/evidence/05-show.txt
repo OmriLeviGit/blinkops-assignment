@@ -1,0 +1,34 @@
+$ tforge show TF-626
+╭─ TF-626 Write release notes ─────────╮
+│ Stage        in progress             │
+│ Description  Cover the new CLI       │
+│ Depends on   -                       │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:30        │
+│ Updated      2026-10-28 14:30        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ tforge show 626
+╭─ TF-626 Write release notes ─────────╮
+│ Stage        in progress             │
+│ Description  Cover the new CLI       │
+│ Depends on   -                       │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:30        │
+│ Updated      2026-10-28 14:30        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ tforge show TF-3
+Error: you can only view your own workitems
+[exit 1]
+
+$ tforge show TF-999
+Error: workitem TF-999 does not exist
+[exit 1]
+
+$ tforge show abc
+Error: workitem ABC does not exist
+[exit 1]
+

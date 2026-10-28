@@ -1,0 +1,43 @@
+$ tforge update TF-629 --depends-on TF-625
+✓ Updated TF-629
+╭─ TF-629 Ship v2.0 ───────────────────╮
+│ Stage        in progress             │
+│ Description  No description          │
+│ Depends on   TF-625                  │
+│ Priority     low                     │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:31        │
+│ Updated      2026-10-28 14:32        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ echo n | tforge delete TF-625
+Delete TF-625 "Fix login redirect"? [y/N]: Aborted.
+
+[exit 1]
+
+$ echo y | tforge delete TF-625
+Delete TF-625 "Fix login redirect"? [y/N]: ✓ Deleted TF-625
+
+[exit 0]
+
+$ tforge show TF-629
+╭─ TF-629 Ship v2.0 ───────────────────╮
+│ Stage        in progress             │
+│ Description  No description          │
+│ Depends on   -                       │
+│ Priority     low                     │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:31        │
+│ Updated      2026-10-28 14:32        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ tforge delete TF-628 --yes
+✓ Deleted TF-628
+[exit 0]
+
+$ tforge delete TF-628 --yes
+Error: workitem TF-628 does not exist
+[exit 1]
+

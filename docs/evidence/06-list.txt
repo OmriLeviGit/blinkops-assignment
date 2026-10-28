@@ -1,0 +1,71 @@
+$ tforge list
+┏━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Ref    ┃ Stage       ┃ Title                 ┃ Description       ┃ Updated          ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ TF-628 │ open        │ Bad stage             │                   │ 2026-10-28 14:30 │
+│ TF-627 │ open        │ Prompted title ticket │                   │ 2026-10-28 14:30 │
+│ TF-626 │ in progress │ Write release notes   │ Cover the new CLI │ 2026-10-28 14:30 │
+│ TF-625 │ open        │ Fix login redirect    │                   │ 2026-10-28 14:30 │
+│ TF-624 │ open        │ Write release notes   │ Cover the new CLI │ 2026-10-28 14:29 │
+│ TF-623 │ open        │ Fix login redirect    │                   │ 2026-10-28 14:29 │
+└────────┴─────────────┴───────────────────────┴───────────────────┴──────────────────┘
+Page 1 · tickets 1–6
+[exit 0]
+
+$ tforge list --page 2 --limit 2
+┏━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Ref    ┃ Stage       ┃ Title               ┃ Description       ┃ Updated          ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ TF-626 │ in progress │ Write release notes │ Cover the new CLI │ 2026-10-28 14:30 │
+│ TF-625 │ open        │ Fix login redirect  │                   │ 2026-10-28 14:30 │
+└────────┴─────────────┴─────────────────────┴───────────────────┴──────────────────┘
+Page 2 · tickets 3–4 · next: tforge list --page 3 --limit 2
+[exit 0]
+
+$ tforge list --all
+┏━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Ref    ┃ Stage       ┃ Title                 ┃ Description       ┃ Updated          ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ TF-628 │ open        │ Bad stage             │                   │ 2026-10-28 14:30 │
+│ TF-627 │ open        │ Prompted title ticket │                   │ 2026-10-28 14:30 │
+│ TF-626 │ in progress │ Write release notes   │ Cover the new CLI │ 2026-10-28 14:30 │
+│ TF-625 │ open        │ Fix login redirect    │                   │ 2026-10-28 14:30 │
+│ TF-624 │ open        │ Write release notes   │ Cover the new CLI │ 2026-10-28 14:29 │
+│ TF-623 │ open        │ Fix login redirect    │                   │ 2026-10-28 14:29 │
+└────────┴─────────────┴───────────────────────┴───────────────────┴──────────────────┘
+6 tickets
+[exit 0]
+
+$ tforge list --stage in_progress
+┏━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ Ref    ┃ Stage       ┃ Title               ┃ Description       ┃ Updated          ┃
+┡━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ TF-626 │ in progress │ Write release notes │ Cover the new CLI │ 2026-10-28 14:30 │
+└────────┴─────────────┴─────────────────────┴───────────────────┴──────────────────┘
+Page 1 · ticket 1
+[exit 0]
+
+$ tforge list --json -n 1
+{
+  "workitems": [
+    {
+      "ref": "TF-628",
+      "title": "Bad stage",
+      "description": null,
+      "stage": "open",
+      "created": "2026-10-28T12:30:53.353Z",
+      "updated": "2026-10-28T12:30:53.353Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 1,
+    "hasMore": true
+  }
+}
+[exit 0]
+
+$ tforge list --page 99
+No tickets on page 99.
+[exit 0]
+

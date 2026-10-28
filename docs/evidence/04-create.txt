@@ -1,0 +1,51 @@
+$ tforge create Fix login redirect
+✓ Created TF-625
+╭─ TF-625 Fix login redirect ───╮
+│ Stage        open             │
+│ Description  No description   │
+│ Depends on   -                │
+│ Created      2026-10-28 14:30 │
+│ Updated      2026-10-28 14:30 │
+╰───────────────────────────────╯
+[exit 0]
+
+$ tforge create Write release notes -d Cover the new CLI --stage in_progress
+✓ Created TF-626
+╭─ TF-626 Write release notes ─────────╮
+│ Stage        in progress             │
+│ Description  Cover the new CLI       │
+│ Depends on   -                       │
+│ Owner        tforge-smoke-1793190535 │
+│ Created      2026-10-28 14:30        │
+│ Updated      2026-10-28 14:30        │
+╰──────────────────────────────────────╯
+[exit 0]
+
+$ tforge create Ship v2 --dep TF-1 --dep TF-2 --field priority=high
+Error: you can only depend on your own tickets: TF-1, TF-2
+[exit 1]
+
+$ echo Prompted\ title\ ticket | tforge create
+Title: ✓ Created TF-627
+╭─ TF-627 Prompted title ticket ─╮
+│ Stage        open              │
+│ Description  No description    │
+│ Depends on   -                 │
+│ Created      2026-10-28 14:30  │
+│ Updated      2026-10-28 14:30  │
+╰────────────────────────────────╯
+
+[exit 0]
+
+$ tforge create Bad field --field nope=1
+Error: unknown custom field(s): nope (available: priority, team). Create one with `tforge fields add NAME`.
+[exit 1]
+
+$ tforge create Bad stage --stage done
+Error: invalid stage 'done'. Choose one of: open, in_progress, review, closed
+[exit 1]
+
+$ tforge create Bad dep --dep TF-999
+Error: dependency tickets do not exist: TF-999
+[exit 1]
+
