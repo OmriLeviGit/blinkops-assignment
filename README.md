@@ -64,6 +64,7 @@ every command. [CI](.github/workflows/ci.yml) runs it with `ruff` (lint and form
 
 - [Installation](#installation)
 - [Setup](#setup)
+- [Quick tour](#quick-tour)
 - [Usage](#usage): [commands](#commands) · [list](#list) · [create and update](#create-and-update) · [other commands](#other-commands) · [exit codes](#exit-codes)
 - [Development](#development)
 - [Assumptions and limitations](#assumptions-and-limitations)
@@ -118,6 +119,27 @@ For scripts and CI, environment variables override the saved config: `TFORGE_USE
 `TFORGE_PASSWORD`, `TFORGE_BASE_URL`, and `TFORGE_CONFIG` (config file path). `status` marks
 any setting that came from one.
 
+## Quick tour
+
+A first session on a new account. Use the refs that `create` prints (refs are numbered across all
+users, so yours won't start at 1); `700` and `701` below are examples.
+
+```bash
+tforge create "Set up CI" -d "Lint and tests"
+tforge create "Release v1" -s in_progress --dep 700         # depends on the first ticket
+tforge update 700 -s review                                 # only the stage changes
+tforge show 701
+tforge list
+tforge list -s review
+tforge list -i                                              # n/p to page, q to quit
+tforge fields add priority                                  # custom fields, defined once
+tforge update 700 -f priority=high
+tforge delete 701
+```
+
+To watch the same flow run by itself, run `scripts/demo.sh`. It uses your configured account and
+deletes what it creates at the end.
+
 ## Usage
 
 ### Commands
@@ -160,8 +182,9 @@ tforge update TF-12 --add-dep TF-3 --remove-dep TF-4
 tforge update TF-12 -f priority=low -f team=
 ```
 
-`update` changes only the fields you pass. An empty value clears it: `-d ''` clears the
-description, `-f team=` unsets the `team` field.
+`-f` needs the field to exist first (`tforge fields add NAME`). `update` changes only the fields
+you pass. An empty value clears it: `-d ''` clears the description, `-f team=` unsets the `team`
+field.
 
 ### Other commands
 
