@@ -47,14 +47,14 @@ def test_setup_rejects_bad_credentials_without_saving(tmp_path, monkeypatch, api
     assert not path.exists()
 
 
-def test_list_prints_next_cursor_when_not_interactive(configured, api):
+def test_list_footer_suggests_next_page(configured, api):
     api.get("/workitems/mine").respond(
-        json={"workitems": [workitem("TF-2")], "pagination": {"hasMore": True, "nextCursor": "t:id"}}
+        json={"workitems": [workitem("TF-3"), workitem("TF-2")], "pagination": {"hasMore": True, "nextCursor": "c"}}
     )
-    result = runner.invoke(app, ["list", "-n", "1"])
+    result = runner.invoke(app, ["list", "--limit", "2"])
     assert result.exit_code == 0, result.output
-    assert "TF-2" in result.output
-    assert "--cursor 't:id'" in result.output
+    assert "TF-3" in result.output
+    assert "Page 1 · tickets 1–2 · next: tforge list --page 2 --limit 2" in result.output
 
 
 def test_list_json(configured, api):
@@ -62,7 +62,34 @@ def test_list_json(configured, api):
     result = runner.invoke(app, ["list", "--json"])
     data = json.loads(result.output)
     assert data["workitems"][0]["ref"] == "TF-2"
-    assert data["pagination"] == {"hasMore": False, "nextCursor": None}
+    assert data["pagination"] == {"page": 1, "limit": 10, "hasMore": False}
+
+
+def test_interactive_rejects_all(configured):
+    result = runner.invoke(app, ["list", "-i", "--all"])
+    assert result.exit_code != 0
+
+
+def test_browse_navigates_pages(monkeypatch):
+    from ticketforge_cli import cli, views
+    from ticketforge_cli.models import WorkItem
+
+    shown = []
+    monkeypatch.setattr(views.console, "clear", lambda: None)
+    monkeypatch.setattr(views, "ticket_table", lambda items, title=None: shown.append([w.ref for w in items]) or "")
+    items = [WorkItem(ref=f"TF-{i}", title="t") for i in range(5, 0, -1)]
+    keys = iter(["n", "n", "n", "p", "x", "q"])
+
+    cli.browse(items, limit=2, read_key=lambda: next(keys))
+
+    assert shown == [
+        ["TF-5", "TF-4"],
+        ["TF-3", "TF-2"],
+        ["TF-1"],
+        ["TF-1"],          # already on the last page
+        ["TF-3", "TF-2"],
+        ["TF-3", "TF-2"],  # unknown key: stay put
+    ]
 
 
 def test_api_error_exits_nonzero(configured, api):

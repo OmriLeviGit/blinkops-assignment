@@ -22,7 +22,6 @@ FIELD_NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
 class ListResult:
     items: list[WorkItem]
     has_more: bool
-    next_cursor: str | None
 
 
 def normalize_stage(value: str) -> str:
@@ -61,36 +60,44 @@ class TicketService:
     def list_tickets(
         self,
         *,
+        page: int = 1,
         limit: int | None = None,
         stage: str | None = None,
-        cursor: str | None = None,
     ) -> ListResult:
-        """Collect up to `limit` tickets (all if None), following the cursor.
+        """Return page `page` of `limit` tickets, or every ticket if `limit` is None.
 
-        Without a filter each request asks for exactly the number still needed,
-        so the returned cursor resumes precisely where the listing stopped.
-        A stage filter has to be applied client-side; in that case the cursor
-        points at the start of the last page fetched, so resuming may repeat a
-        few rows rather than skip any.
+        The API only offers cursor pagination in chunks of at most 5, so a page
+        number is emulated by walking the cursor from the start and skipping
+        earlier rows. The stage filter is applied client-side before paging,
+        so page 2 of `--stage open` is the second page of open tickets.
         """
+        if page < 1:
+            raise ValidationError("page must be 1 or greater")
+        if limit is not None and limit < 1:
+            raise ValidationError("limit must be 1 or greater")
         stage = normalize_stage(stage) if stage else None
+        skip = (page - 1) * limit if limit else 0
         items: list[WorkItem] = []
-        has_more = True
-        while has_more and (limit is None or len(items) < limit):
-            want = MAX_PAGE_SIZE
-            if limit is not None and stage is None:
-                want = min(MAX_PAGE_SIZE, limit - len(items))
-            page = self.client.list_page(limit=want, cursor=cursor)
-            matching = [w for w in page.items if stage is None or w.stage == stage]
+        cursor: str | None = None
+        while True:
+            chunk = self.client.list_page(limit=MAX_PAGE_SIZE, cursor=cursor)
+            for item in chunk.items:
+                if stage and item.stage != stage:
+                    continue
+                if skip:
+                    skip -= 1
+                    continue
+                if limit is not None and len(items) == limit:
+                    return ListResult(items, has_more=True)
+                items.append(item)
 
-            if limit is not None and len(items) + len(matching) > limit:
-                items.extend(matching[: limit - len(items)])
-                return ListResult(items, True, cursor)
-
-            items.extend(matching)
-            has_more = page.has_more and bool(page.next_cursor)
-            cursor = page.next_cursor if has_more else None
-        return ListResult(items, has_more, cursor)
+            more_chunks = chunk.has_more and bool(chunk.next_cursor)
+            if not more_chunks:
+                return ListResult(items, has_more=False)
+            if limit is not None and len(items) == limit and stage is None:
+                # Unfiltered: another chunk exists, so there is a next page.
+                return ListResult(items, has_more=True)
+            cursor = chunk.next_cursor
 
     # ------------------------------------------------------------ tickets
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import functools
+import math
+import shlex
 import sys
 from collections.abc import Callable
 from typing import Annotated, Any, TypeVar
@@ -12,7 +14,8 @@ import typer
 from . import views
 from .client import TicketForgeClient
 from .config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
-from .errors import AuthError, ConfigError, TicketForgeError
+from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
+from .models import WorkItem
 from .services import TicketService, parse_field_assignments
 
 app = typer.Typer(
@@ -133,39 +136,89 @@ def status() -> None:
 @app.command("list")
 @handle_errors
 def list_tickets(
+    page: Annotated[int, typer.Option("--page", "-p", min=1, help="Page number.")] = 1,
     limit: Annotated[int, typer.Option("--limit", "-n", min=1, help="Tickets per page.")] = 10,
-    all_: Annotated[bool, typer.Option("--all", "-a", help="Fetch every ticket.")] = False,
+    all_: Annotated[bool, typer.Option("--all", "-a", help="Show every ticket, no paging.")] = False,
+    interactive: Annotated[bool, typer.Option("--interactive", "-i", help="Browse pages with n/p/q.")] = False,
     stage: Annotated[str | None, typer.Option("--stage", "-s", help="Filter by stage.")] = None,
-    cursor: Annotated[str | None, typer.Option(help="Resume from a cursor printed by a previous run.")] = None,
-    no_pager: Annotated[bool, typer.Option("--no-pager", help="Don't prompt for more pages.")] = False,
     as_json: JsonOpt = False,
 ) -> None:
     """List your tickets, newest first."""
+    if interactive and (all_ or as_json):
+        raise typer.BadParameter("--interactive can't be combined with --all or --json")
     svc = get_service()
-    interactive = sys.stdin.isatty() and sys.stdout.isatty() and not (as_json or all_ or no_pager)
-    page_no = 1
-    while True:
-        result = svc.list_tickets(limit=None if all_ else limit, stage=stage, cursor=cursor)
-        if as_json:
-            views.print_json(
-                {
-                    "workitems": [w.raw for w in result.items],
-                    "pagination": {"hasMore": result.has_more, "nextCursor": result.next_cursor},
-                }
-            )
-            return
-        if not result.items and page_no == 1:
+
+    if interactive:
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            raise ValidationError("--interactive needs a terminal")
+        with views.console.status("Fetching tickets…"):
+            items = svc.list_tickets(stage=stage).items
+        if not items:
             views.console.print("No tickets found.")
             return
-        views.console.print(views.ticket_table(result.items, title=f"Page {page_no}" if interactive else None))
-        if not result.has_more:
+        browse(items, limit, page)
+        return
+
+    result = svc.list_tickets(page=page, limit=None if all_ else limit, stage=stage)
+    if as_json:
+        pagination = {"page": None if all_ else page, "limit": None if all_ else limit, "hasMore": result.has_more}
+        views.print_json({"workitems": [w.raw for w in result.items], "pagination": pagination})
+        return
+    if not result.items:
+        views.console.print("No tickets found." if page == 1 or all_ else f"No tickets on page {page}.")
+        return
+
+    views.console.print(views.ticket_table(result.items))
+    if all_:
+        views.info(f"{len(result.items)} tickets")
+        return
+    start = (page - 1) * limit + 1
+    end = start + len(result.items) - 1
+    footer = f"Page {page} · " + (f"ticket {start}" if start == end else f"tickets {start}–{end}")
+    if result.has_more:
+        args = [f"--page {page + 1}"]
+        if limit != 10:
+            args.append(f"--limit {limit}")
+        if stage:
+            args.append(f"--stage {shlex.quote(stage)}")
+        footer += f" · next: tforge list {' '.join(args)}"
+    views.info(footer)
+
+
+QUIT_KEYS = {"q", "\x1b", "\x03"}
+NEXT_KEYS = {"n", " ", "\r", "\n", "\x1b[C", "\x1b[B"}
+PREV_KEYS = {"p", "\x1b[D", "\x1b[A"}
+
+
+def browse(
+    items: list[WorkItem],
+    limit: int,
+    page: int = 1,
+    read_key: Callable[[], str] = typer.getchar,
+) -> None:
+    """Page through already-fetched tickets with single keypresses."""
+    total = max(1, math.ceil(len(items) / limit))
+    page = min(page, total)
+    while True:
+        views.console.clear()
+        chunk = items[(page - 1) * limit : page * limit]
+        views.console.print(views.ticket_table(chunk))
+        views.console.print(
+            f"Page {page}/{total} · {len(items)} tickets · "
+            "[bold]\\[n][/]ext  [bold]\\[p][/]rev  [bold]\\[q][/]uit > ",
+            end="",
+        )
+        try:
+            key = read_key().lower()
+        except (KeyboardInterrupt, typer.Abort):
+            key = "q"
+        if key in QUIT_KEYS:
+            views.console.print()
             return
-        if not interactive:
-            views.info(f"More tickets available. Next page: tforge list --cursor '{result.next_cursor}'")
-            return
-        if not typer.confirm("Show more?", default=True):
-            return
-        cursor, page_no = result.next_cursor, page_no + 1
+        if key in NEXT_KEYS and page < total:
+            page += 1
+        elif key in PREV_KEYS and page > 1:
+            page -= 1
 
 
 @app.command()

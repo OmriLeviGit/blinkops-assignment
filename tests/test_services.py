@@ -148,16 +148,15 @@ def test_create_requires_title(svc):
 # ------------------------------------------------------------------ listing
 
 
-def pages(*batches):
-    """Mock /workitems/mine serving `batches` in order, honoring `limit`."""
-    flat = [ref for batch in batches for ref in batch]
+def serve(data):
+    """Mock /workitems/mine over `data` [(ref, stage)], honoring limit and cursor."""
 
     def handler(request):
         limit = int(request.url.params.get("limit", 5))
         start = int(request.url.params.get("cursor", 0))
-        chunk = flat[start : start + limit]
+        chunk = data[start : start + limit]
         nxt = start + len(chunk)
-        has_more = nxt < len(flat)
+        has_more = nxt < len(data)
         return httpx.Response(
             200,
             json={
@@ -169,36 +168,66 @@ def pages(*batches):
     return handler
 
 
-def test_list_with_limit_returns_exact_resume_cursor(svc, api):
-    data = [(f"TF-{i}", "open") for i in range(12, 0, -1)]
-    api.get("/workitems/mine").mock(side_effect=pages(data))
-
-    first = svc.list_tickets(limit=7)
-    assert [w.ref for w in first.items] == [f"TF-{i}" for i in range(12, 5, -1)]
-    assert first.has_more and first.next_cursor == "7"
-
-    rest = svc.list_tickets(cursor=first.next_cursor)
-    assert [w.ref for w in rest.items] == [f"TF-{i}" for i in range(5, 0, -1)]
-    assert not rest.has_more and rest.next_cursor is None
+def refs(result):
+    return [w.ref for w in result.items]
 
 
-def test_list_filters_stage_client_side(svc, api):
+TWELVE = [(f"TF-{i}", "open") for i in range(12, 0, -1)]
+
+
+def test_list_pages_by_number(svc, api):
+    api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+
+    first = svc.list_tickets(page=1, limit=5)
+    assert refs(first) == ["TF-12", "TF-11", "TF-10", "TF-9", "TF-8"] and first.has_more
+
+    third = svc.list_tickets(page=3, limit=5)
+    assert refs(third) == ["TF-2", "TF-1"] and not third.has_more
+
+    assert svc.list_tickets(page=4, limit=5).items == []
+
+
+def test_list_page_spanning_api_chunks(svc, api):
+    api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+    result = svc.list_tickets(page=2, limit=4)
+    assert refs(result) == ["TF-8", "TF-7", "TF-6", "TF-5"] and result.has_more
+
+
+def test_list_last_full_page_has_no_more(svc, api):
+    route = api.get("/workitems/mine").mock(side_effect=serve(TWELVE[:10]))
+    result = svc.list_tickets(page=2, limit=5)
+    assert refs(result) == ["TF-7", "TF-6", "TF-5", "TF-4", "TF-3"]
+    assert not result.has_more
+    assert route.call_count == 2
+
+
+def test_list_unfiltered_stops_without_extra_request(svc, api):
+    route = api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+    svc.list_tickets(page=1, limit=5)
+    assert route.call_count == 1
+
+
+def test_list_all(svc, api):
+    api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+    result = svc.list_tickets()
+    assert len(result.items) == 12 and not result.has_more
+
+
+def test_list_filters_stage_before_paging(svc, api):
     data = [("TF-6", "open"), ("TF-5", "closed"), ("TF-4", "open"), ("TF-3", "closed"),
             ("TF-2", "closed"), ("TF-1", "open")]
-    api.get("/workitems/mine").mock(side_effect=pages(data))
+    api.get("/workitems/mine").mock(side_effect=serve(data))
 
-    result = svc.list_tickets(stage="closed")
-    assert [w.ref for w in result.items] == ["TF-5", "TF-3", "TF-2"]
+    assert refs(svc.list_tickets(stage="closed")) == ["TF-5", "TF-3", "TF-2"]
+    first = svc.list_tickets(stage="closed", page=1, limit=2)
+    assert refs(first) == ["TF-5", "TF-3"] and first.has_more
+    second = svc.list_tickets(stage="closed", page=2, limit=2)
+    assert refs(second) == ["TF-2"] and not second.has_more
 
 
-def test_list_with_stage_and_limit_never_skips_rows(svc, api):
-    data = [(f"TF-{i}", "open") for i in range(8, 0, -1)]
-    api.get("/workitems/mine").mock(side_effect=pages(data))
-
-    first = svc.list_tickets(limit=3, stage="open")
-    assert [w.ref for w in first.items] == ["TF-8", "TF-7", "TF-6"]
-    rest = svc.list_tickets(cursor=first.next_cursor, stage="open")
-    assert "TF-5" in [w.ref for w in rest.items]
+def test_list_rejects_bad_page(svc):
+    with pytest.raises(ValidationError):
+        svc.list_tickets(page=0, limit=5)
 
 
 # ------------------------------------------------------------------ fields
