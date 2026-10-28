@@ -163,7 +163,8 @@ tforge update TF-12 -f priority=low -f team=
 
 Without a title, `create` asks for the title, description, stage, dependencies and each custom
 field in turn (Enter skips the optional ones); options you did pass aren't asked again.
-`update` changes only the fields you pass. An empty value clears it: `-d ''` clears the
+`tforge update TF-12` with no options does the same, with the current values as defaults (Enter
+keeps a value, `-` clears it). Otherwise `update` changes only the fields you pass. An empty value clears it: `-d ''` clears the
 description, `-f team=` unsets the `team` field.
 
 ### Other commands

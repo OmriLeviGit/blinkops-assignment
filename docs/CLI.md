@@ -193,6 +193,8 @@ $ tforge create "Ship v2" --dep TF-12 --dep TF-13 -f priority=high
 
 Update a ticket. Only the options you pass are changed.
 
+With no options, asks for each field with the current value as the default.
+
 **Usage**:
 
 ```console
@@ -219,6 +221,7 @@ $ tforge update [OPTIONS] {ref}
 **Examples**:
 
 ```console
+$ tforge update TF-12  # asks for each field, current values as defaults
 $ tforge update TF-12 -s review
 $ tforge update TF-12 -t 'New title' -d ''  # '' clears the description
 $ tforge update TF-12 --add-dep TF-3 --remove-dep TF-4

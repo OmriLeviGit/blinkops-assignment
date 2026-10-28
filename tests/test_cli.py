@@ -546,10 +546,13 @@ def test_update_json(configured, api):
     assert json.loads(result.output)["stage"] == "closed"
 
 
-def test_update_without_options(configured, api):
-    result = runner.invoke(app, ["update", "TF-5"])
+def test_update_without_options_asks_and_sends_nothing_on_eof(configured, api):
+    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    put = api.put("/workitem/TF-5")
+    result = runner.invoke(app, ["update", "TF-5"])  # no input: EOF at the first prompt
     assert result.exit_code == 1
-    assert "nothing to update" in result.output
+    assert "Title [Ticket TF-5]" in result.output
+    assert not put.called
 
 
 def test_update_bad_field_syntax(configured, api):
@@ -769,3 +772,39 @@ def test_create_guided_requires_a_title(configured, api):
     result = runner.invoke(app, ["create"], input="  \nReal\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert "a value is required" in result.output
+
+
+def test_update_guided_sends_only_what_changed(configured, api):
+    current = workitem(
+        "TF-5",
+        title="Old",
+        description="Keep me",
+        dependsOn=["TF-1"],
+        customFields={"priority": "high"},
+    )
+    api.get("/workitem/TF-5").respond(json={"workitem": current})
+    api.get("/custom-fields").respond(json=FIELDS)
+    put = api.put("/workitem/TF-5").respond(json={"workitem": current})
+    # title: keep, description: clear, stage: "-" refused then review, deps: change, priority: keep
+    answers = ["", "-", "-", "review", "TF-2, 3", ""]
+    result = runner.invoke(app, ["update", "5"], input="\n".join(answers) + "\n")
+    assert result.exit_code == 0, result.output
+    assert "Title [Old]" in result.output
+    assert "the stage can't be cleared" in result.output
+    assert json.loads(put.calls.last.request.content) == {
+        "title": "Old",
+        "description": None,
+        "stage": "review",
+        "dependsOn": ["TF-2", "TF-3"],
+        "customFields": {"priority": "high"},
+    }
+
+
+def test_update_guided_without_changes_sends_nothing(configured, api):
+    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    api.get("/custom-fields").respond(json={"customFields": []})
+    put = api.put("/workitem/TF-5")
+    result = runner.invoke(app, ["update", "5"], input="\n\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert "No changes" in result.output
+    assert not put.called
