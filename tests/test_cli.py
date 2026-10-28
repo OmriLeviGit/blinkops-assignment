@@ -1,5 +1,7 @@
 import json
 
+import httpx
+
 import pytest
 from typer.testing import CliRunner
 
@@ -70,26 +72,59 @@ def test_interactive_rejects_all(configured):
     assert result.exit_code != 0
 
 
-def test_browse_navigates_pages(monkeypatch):
+def test_browse_lazy_navigation(monkeypatch, client, api):
     from ticketforge_cli import cli, views
-    from ticketforge_cli.models import WorkItem
+    from ticketforge_cli.services import TicketService
 
-    shown = []
+    data = [workitem(f"TF-{i}") for i in range(7, 0, -1)]
+
+    def handler(request):
+        start = int(request.url.params.get("cursor", 0))
+        chunk = data[start : start + 5]
+        more = start + 5 < len(data)
+        return httpx.Response(
+            200, json={"workitems": chunk, "pagination": {"hasMore": more, **({"nextCursor": "5"} if more else {})}}
+        )
+
+    route = api.get("/workitems/mine").mock(side_effect=handler)
+    screens = []
     monkeypatch.setattr(views.console, "clear", lambda: None)
-    monkeypatch.setattr(views, "ticket_table", lambda items, title=None: shown.append([w.ref for w in items]) or "")
-    items = [WorkItem(ref=f"TF-{i}", title="t") for i in range(5, 0, -1)]
-    keys = iter(["n", "n", "n", "p", "x", "q"])
+    monkeypatch.setattr(views, "ticket_table", lambda items, title=None: [w.ref for w in items])
+    monkeypatch.setattr(views.console, "print", lambda *a, **k: screens.append(a[0] if a else ""))
 
-    cli.browse(items, limit=2, read_key=lambda: next(keys))
+    calls_after = []
+    keys = iter(["n", "n", "n", "p", "p", "q"])
 
-    assert shown == [
-        ["TF-5", "TF-4"],
-        ["TF-3", "TF-2"],
+    def read_key():
+        calls_after.append(route.call_count)
+        return next(keys)
+
+    cli.browse(TicketService(client).pager(), limit=3, read_key=read_key)
+
+    tables = [x for x in screens if isinstance(x, list)]
+    prompts = [x for x in screens if isinstance(x, str) and x.startswith("Page")]
+    assert tables == [
+        ["TF-7", "TF-6", "TF-5"],
+        ["TF-4", "TF-3", "TF-2"],
         ["TF-1"],
-        ["TF-1"],          # already on the last page
-        ["TF-3", "TF-2"],
-        ["TF-3", "TF-2"],  # unknown key: stay put
+        ["TF-1"],                  # n on the last page does nothing
+        ["TF-4", "TF-3", "TF-2"],
+        ["TF-7", "TF-6", "TF-5"],
     ]
+    assert prompts[0].startswith("Page 1 · 5 loaded") and "\\[n]" in prompts[0]
+    assert prompts[2].startswith("Page 3/3 · 7 tickets") and "\\[n]" not in prompts[2]
+    assert calls_after == [1, 2, 2, 2, 2, 2]  # going back never fetches
+
+
+def test_browse_empty(monkeypatch, client, api):
+    from ticketforge_cli import cli, views
+    from ticketforge_cli.services import TicketService
+
+    api.get("/workitems/mine").respond(json={"workitems": [], "pagination": {"hasMore": False}})
+    out = []
+    monkeypatch.setattr(views.console, "print", lambda *a, **k: out.append(a[0] if a else ""))
+    cli.browse(TicketService(client).pager(), limit=3, read_key=lambda: "q")
+    assert out == ["No tickets found."]
 
 
 def test_api_error_exits_nonzero(configured, api):

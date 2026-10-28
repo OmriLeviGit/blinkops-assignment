@@ -230,6 +230,49 @@ def test_list_rejects_bad_page(svc):
         svc.list_tickets(page=0, limit=5)
 
 
+def test_pager_loads_lazily_and_caches(svc, api):
+    route = api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+    pager = svc.pager()
+
+    first = pager.page(1, 3)
+    assert refs(first) == ["TF-12", "TF-11", "TF-10"] and first.has_more
+    assert route.call_count == 1
+    assert pager.total_pages(3) is None
+
+    pager.page(2, 3)
+    assert route.call_count == 2
+
+    pager.page(1, 3)  # going back is served from the cache
+    assert route.call_count == 2
+
+
+def test_pager_knows_total_once_exhausted(svc, api):
+    api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+    pager = svc.pager()
+    last = pager.page(4, 3)
+    assert refs(last) == ["TF-3", "TF-2", "TF-1"] and not last.has_more
+    assert pager.total_pages(3) == 4
+    assert pager.total_pages(5) == 3
+
+
+def test_pager_filtered_looks_ahead_for_a_match(svc, api):
+    data = [("TF-6", "closed"), ("TF-5", "open"), ("TF-4", "open"), ("TF-3", "open"),
+            ("TF-2", "open"), ("TF-1", "open")]
+    route = api.get("/workitems/mine").mock(side_effect=serve(data))
+    result = svc.pager("closed").page(1, 1)
+    assert refs(result) == ["TF-6"] and not result.has_more
+    assert route.call_count == 2  # had to scan the rest to learn there are no more matches
+
+
+def test_pager_is_cached(svc, api):
+    api.get("/workitems/mine").mock(side_effect=serve(TWELVE))
+    pager = svc.pager()
+    assert not pager.is_cached(1, 3)
+    pager.page(1, 3)
+    assert pager.is_cached(1, 3)
+    assert not pager.is_cached(2, 3)
+
+
 # ------------------------------------------------------------------ fields
 
 

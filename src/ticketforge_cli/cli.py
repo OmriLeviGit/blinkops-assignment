@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import functools
-import math
 import shlex
 import sys
 from collections.abc import Callable
@@ -15,8 +14,7 @@ from . import views
 from .client import TicketForgeClient
 from .config import DEFAULT_BASE_URL, Config, config_path, load_config, save_config
 from .errors import AuthError, ConfigError, TicketForgeError, ValidationError
-from .models import WorkItem
-from .services import TicketService, parse_field_assignments
+from .services import TicketPager, TicketService, parse_field_assignments
 
 app = typer.Typer(
     help="Manage TicketForge tickets from the terminal.",
@@ -151,12 +149,7 @@ def list_tickets(
     if interactive:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
             raise ValidationError("--interactive needs a terminal")
-        with views.console.status("Fetching tickets…"):
-            items = svc.list_tickets(stage=stage).items
-        if not items:
-            views.console.print("No tickets found.")
-            return
-        browse(items, limit, page)
+        browse(svc.pager(stage), limit, page)
         return
 
     result = svc.list_tickets(page=page, limit=None if all_ else limit, stage=stage)
@@ -191,23 +184,41 @@ PREV_KEYS = {"p", "\x1b[D", "\x1b[A"}
 
 
 def browse(
-    items: list[WorkItem],
+    pager: TicketPager,
     limit: int,
     page: int = 1,
     read_key: Callable[[], str] = typer.getchar,
 ) -> None:
-    """Page through already-fetched tickets with single keypresses."""
-    total = max(1, math.ceil(len(items) / limit))
-    page = min(page, total)
+    """Page through tickets with single keypresses, fetching only when moving onto new pages."""
     while True:
+        if pager.is_cached(page, limit):
+            result = pager.page(page, limit)
+        else:
+            with views.console.status("Loading…"):
+                result = pager.page(page, limit)
+        if not result.items:
+            if page == 1:
+                views.console.print("No tickets found.")
+                return
+            page = pager.total_pages(limit) or 1  # --page past the end
+            continue
+
         views.console.clear()
-        chunk = items[(page - 1) * limit : page * limit]
-        views.console.print(views.ticket_table(chunk))
-        views.console.print(
-            f"Page {page}/{total} · {len(items)} tickets · "
-            "[bold]\\[n][/]ext  [bold]\\[p][/]rev  [bold]\\[q][/]uit > ",
-            end="",
+        views.console.print(views.ticket_table(result.items))
+        total = pager.total_pages(limit)
+        position = (
+            f"Page {page}/{total} · {len(pager.loaded)} tickets"
+            if total
+            else f"Page {page} · {len(pager.loaded)} loaded"
         )
+        actions = []
+        if result.has_more:
+            actions.append("[bold]\\[n][/]ext")
+        if page > 1:
+            actions.append("[bold]\\[p][/]rev")
+        actions.append("[bold]\\[q][/]uit")
+        views.console.print(f"{position} · {'  '.join(actions)} > ", end="")
+
         try:
             key = read_key().lower()
         except (KeyboardInterrupt, typer.Abort):
@@ -215,7 +226,7 @@ def browse(
         if key in QUIT_KEYS:
             views.console.print()
             return
-        if key in NEXT_KEYS and page < total:
+        if key in NEXT_KEYS and result.has_more:
             page += 1
         elif key in PREV_KEYS and page > 1:
             page -= 1

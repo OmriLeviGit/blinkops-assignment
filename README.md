@@ -29,7 +29,7 @@ Page 1 · tickets 1–3 · next: tforge list --page 2 --limit 3
   up, and retries with backoff on 429 and transient errors
 - Colored tables, a `--json` flag on every read/write command for scripting, and
   meaningful exit codes
-- 54 tests with mocked HTTP
+- 59 tests with mocked HTTP
 
 ## Installation
 
@@ -120,12 +120,18 @@ tforge list --interactive          # or -i; combine with --limit and --stage
 ```
 
 ```
-Page 1/3 · 23 tickets · [n]ext  [p]rev  [q]uit >
+Page 1 · 10 loaded · [n]ext  [q]uit >
+Page 2 · 25 loaded · [n]ext  [p]rev  [q]uit >
+Page 3/3 · 27 tickets · [p]rev  [q]uit >
 ```
 
 Single keypresses: `n`/space/→ for next, `p`/← for previous, `q`/Esc to quit.
-Interactive mode fetches the whole (filtered) list once, then pages locally,
-so moving between pages is instant and the page total is exact.
+
+Tickets are **loaded lazily**: the browser fetches from the API only when you
+move onto a page it hasn't seen, and keeps everything loaded so going back is
+instant and free. The API has no count endpoint, so the page total (`3/3`)
+appears once the end of the list is reached. Opening the browser costs one or
+two requests no matter how many tickets you have.
 
 ### Show
 
@@ -232,7 +238,8 @@ filtering, config precedence, and the main CLI flows.
   and cursors must point at a real ticket, so `--page N` walks the cursor from
   the start: page N of size L costs about `N×L/5` requests against the 50/min
   rate limit. That's fine for personal ticket lists, but would need server
-  support to scale to very large ones.
+  support to scale to very large ones. The interactive browser avoids paying
+  this up front by loading pages only as you move forward.
 - **Stage filtering is client-side**, since the server ignores filter parameters.
   The filter is applied before paging, which means scanning tickets until enough
   matches are found.

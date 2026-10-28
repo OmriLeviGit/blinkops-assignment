@@ -7,6 +7,7 @@ fields are addressed by opaque ids.
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -50,12 +51,76 @@ def parse_field_assignments(pairs: Iterable[str]) -> dict[str, str]:
     return result
 
 
+class TicketPager:
+    """Page-number access over the cursor API, loading lazily and caching.
+
+    The API only offers forward cursor pagination in chunks of at most 5, with
+    no offset and no server-side filtering. The pager fetches chunks only when
+    a page beyond what is cached is requested, applies the stage filter
+    client-side, and keeps everything loaded so revisiting a page is free.
+    """
+
+    def __init__(self, client: TicketForgeClient, *, stage: str | None = None) -> None:
+        self.client = client
+        self.stage = normalize_stage(stage) if stage else None
+        self.loaded: list[WorkItem] = []
+        self.exhausted = False
+        self.requests = 0
+        self._cursor: str | None = None
+
+    def ensure(self, count: int) -> None:
+        """Fetch chunks until `count` matching tickets are cached or the list ends."""
+        while len(self.loaded) < count and not self.exhausted:
+            chunk = self.client.list_page(limit=MAX_PAGE_SIZE, cursor=self._cursor)
+            self.requests += 1
+            self.loaded.extend(w for w in chunk.items if self.stage is None or w.stage == self.stage)
+            self._cursor = chunk.next_cursor
+            self.exhausted = not (chunk.has_more and chunk.next_cursor)
+
+    def is_cached(self, number: int, size: int) -> bool:
+        return self.exhausted or len(self.loaded) > number * size
+
+    def page(self, number: int, size: int) -> ListResult:
+        if number < 1:
+            raise ValidationError("page must be 1 or greater")
+        if size < 1:
+            raise ValidationError("limit must be 1 or greater")
+        end = number * size
+        self.ensure(end)
+        if len(self.loaded) > end:
+            has_more = True
+        elif self.exhausted:
+            has_more = False
+        elif self.stage is None:
+            # Unfiltered: the API reported another non-empty chunk.
+            has_more = True
+        else:
+            # Filtered: more chunks don't guarantee more matches, so look ahead.
+            self.ensure(end + 1)
+            has_more = len(self.loaded) > end
+        return ListResult(self.loaded[end - size : end], has_more)
+
+    def load_all(self) -> list[WorkItem]:
+        while not self.exhausted:
+            self.ensure(len(self.loaded) + MAX_PAGE_SIZE)
+        return self.loaded
+
+    def total_pages(self, size: int) -> int | None:
+        """Exact page count once the end of the list has been reached, else None."""
+        if not self.exhausted:
+            return None
+        return max(1, math.ceil(len(self.loaded) / size))
+
+
 class TicketService:
     def __init__(self, client: TicketForgeClient) -> None:
         self.client = client
         self._fields: list[CustomField] | None = None
 
     # ------------------------------------------------------------ listing
+
+    def pager(self, stage: str | None = None) -> TicketPager:
+        return TicketPager(self.client, stage=stage)
 
     def list_tickets(
         self,
@@ -64,40 +129,11 @@ class TicketService:
         limit: int | None = None,
         stage: str | None = None,
     ) -> ListResult:
-        """Return page `page` of `limit` tickets, or every ticket if `limit` is None.
-
-        The API only offers cursor pagination in chunks of at most 5, so a page
-        number is emulated by walking the cursor from the start and skipping
-        earlier rows. The stage filter is applied client-side before paging,
-        so page 2 of `--stage open` is the second page of open tickets.
-        """
-        if page < 1:
-            raise ValidationError("page must be 1 or greater")
-        if limit is not None and limit < 1:
-            raise ValidationError("limit must be 1 or greater")
-        stage = normalize_stage(stage) if stage else None
-        skip = (page - 1) * limit if limit else 0
-        items: list[WorkItem] = []
-        cursor: str | None = None
-        while True:
-            chunk = self.client.list_page(limit=MAX_PAGE_SIZE, cursor=cursor)
-            for item in chunk.items:
-                if stage and item.stage != stage:
-                    continue
-                if skip:
-                    skip -= 1
-                    continue
-                if limit is not None and len(items) == limit:
-                    return ListResult(items, has_more=True)
-                items.append(item)
-
-            more_chunks = chunk.has_more and bool(chunk.next_cursor)
-            if not more_chunks:
-                return ListResult(items, has_more=False)
-            if limit is not None and len(items) == limit and stage is None:
-                # Unfiltered: another chunk exists, so there is a next page.
-                return ListResult(items, has_more=True)
-            cursor = chunk.next_cursor
+        """Return page `page` of `limit` tickets, or every ticket if `limit` is None."""
+        pager = self.pager(stage)
+        if limit is None:
+            return ListResult(pager.load_all(), has_more=False)
+        return pager.page(page, limit)
 
     # ------------------------------------------------------------ tickets
 
