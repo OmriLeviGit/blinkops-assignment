@@ -68,14 +68,12 @@ class TicketPager:
         self.stage = normalize_stage(stage) if stage else None
         self.loaded: list[WorkItem] = []
         self.exhausted = False
-        self.requests = 0
         self._cursor: str | None = None
 
     def ensure(self, count: int) -> None:
         """Fetch chunks until `count` matching tickets are cached or the list ends."""
         while len(self.loaded) < count and not self.exhausted:
             chunk = self.client.list_page(limit=MAX_PAGE_SIZE, cursor=self._cursor)
-            self.requests += 1
             self.loaded.extend(
                 w for w in chunk.items if self.stage is None or w.stage == self.stage
             )
