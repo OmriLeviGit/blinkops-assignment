@@ -197,7 +197,8 @@ def test_create_prompts_for_title_and_prints_json(configured, api):
     post = api.post("/workitem/publish").respond(
         json={"workitem": workitem("TF-3", title="From prompt")}
     )
-    result = runner.invoke(app, ["create", "--json"], input="From prompt\n")
+    api.get("/custom-fields").respond(json={"customFields": []})
+    result = runner.invoke(app, ["create", "--json"], input="From prompt\n\n\n\n")
     assert result.exit_code == 0, result.output
     assert json.loads(post.calls.last.request.content)["title"] == "From prompt"
     assert json.loads(result.output[result.output.index("{") :])["ref"] == "TF-3"
@@ -545,10 +546,13 @@ def test_update_json(configured, api):
     assert json.loads(result.output)["stage"] == "closed"
 
 
-def test_update_without_options(configured, api):
-    result = runner.invoke(app, ["update", "TF-5"])
+def test_update_without_options_asks_and_sends_nothing_on_eof(configured, api):
+    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    put = api.put("/workitem/TF-5")
+    result = runner.invoke(app, ["update", "TF-5"])  # no input: EOF at the first prompt
     assert result.exit_code == 1
-    assert "nothing to update" in result.output
+    assert "Title [Ticket TF-5]" in result.output
+    assert not put.called
 
 
 def test_update_bad_field_syntax(configured, api):
@@ -729,3 +733,78 @@ def test_create_reports_ticket_when_stage_update_fails(configured, api, monkeypa
     assert result.exit_code == (130 if interrupted else 1)
     assert "Created TF-3, but its stage wasn't set" in result.output
     assert "tforge update TF-3 -s review" in result.output
+
+
+def test_create_guided_asks_for_each_field(configured, api):
+    api.get("/custom-fields").respond(json=FIELDS)
+    post = api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    api.get("/workitem/TF-3").respond(json={"workitem": workitem("TF-3")})
+    put = api.put("/workitem/TF-3").respond(json={"workitem": workitem("TF-3", stage="review")})
+    answers = ["Ship v2", "Release notes", "nope", "review", "TF-1, x", "1, 2", "high"]
+    result = runner.invoke(app, ["create"], input="\n".join(answers) + "\n")
+    assert result.exit_code == 0, result.output
+    for prompt in ("Title", "Description (optional)", "Stage [open]", "Depends on", "Priority"):
+        assert prompt in result.output
+    assert "invalid stage 'nope'" in result.output
+    assert "invalid ref 'x'" in result.output
+    assert json.loads(post.calls.last.request.content) == {
+        "title": "Ship v2",
+        "description": "Release notes",
+        "dependsOn": ["TF-1", "TF-2"],
+        "customFields": {"priority": "high"},
+    }
+    assert json.loads(put.calls.last.request.content)["stage"] == "review"
+
+
+def test_create_guided_skips_prompts_for_given_options(configured, api):
+    api.get("/custom-fields").respond(json={"customFields": []})
+    post = api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    result = runner.invoke(app, ["create", "-d", "Given", "--dep", "TF-1"], input="T\n\n")
+    assert result.exit_code == 0, result.output
+    assert "Description (optional)" not in result.output
+    assert "Depends on (refs" not in result.output
+    assert json.loads(post.calls.last.request.content)["description"] == "Given"
+
+
+def test_create_guided_requires_a_title(configured, api):
+    api.get("/custom-fields").respond(json={"customFields": []})
+    api.post("/workitem/publish").respond(json={"workitem": workitem("TF-3")})
+    result = runner.invoke(app, ["create"], input="  \nReal\n\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert "a value is required" in result.output
+
+
+def test_update_guided_sends_only_what_changed(configured, api):
+    current = workitem(
+        "TF-5",
+        title="Old",
+        description="Keep me",
+        dependsOn=["TF-1"],
+        customFields={"priority": "high"},
+    )
+    api.get("/workitem/TF-5").respond(json={"workitem": current})
+    api.get("/custom-fields").respond(json=FIELDS)
+    put = api.put("/workitem/TF-5").respond(json={"workitem": current})
+    # title: keep, description: clear, stage: "-" refused then review, deps: change, priority: keep
+    answers = ["", "-", "-", "review", "TF-2, 3", ""]
+    result = runner.invoke(app, ["update", "5"], input="\n".join(answers) + "\n")
+    assert result.exit_code == 0, result.output
+    assert "Title [Old]" in result.output
+    assert "the stage can't be cleared" in result.output
+    assert json.loads(put.calls.last.request.content) == {
+        "title": "Old",
+        "description": None,
+        "stage": "review",
+        "dependsOn": ["TF-2", "TF-3"],
+        "customFields": {"priority": "high"},
+    }
+
+
+def test_update_guided_without_changes_sends_nothing(configured, api):
+    api.get("/workitem/TF-5").respond(json={"workitem": workitem("TF-5")})
+    api.get("/custom-fields").respond(json={"customFields": []})
+    put = api.put("/workitem/TF-5")
+    result = runner.invoke(app, ["update", "5"], input="\n\n\n\n")
+    assert result.exit_code == 0, result.output
+    assert "No changes" in result.output
+    assert not put.called

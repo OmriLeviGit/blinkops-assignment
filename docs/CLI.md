@@ -169,7 +169,7 @@ $ tforge create [OPTIONS] [title]
 
 **Arguments**:
 
-* `title`: Ticket title (prompted if omitted).
+* `title`: Ticket title. Omit it to be asked for each field.
 
 **Options**:
 
@@ -183,6 +183,7 @@ $ tforge create [OPTIONS] [title]
 **Examples**:
 
 ```console
+$ tforge create  # asks for each field
 $ tforge create "Fix login redirect"
 $ tforge create "Write release notes" -d "Cover the new CLI" -s in_progress
 $ tforge create "Ship v2" --dep TF-12 --dep TF-13 -f priority=high
@@ -191,6 +192,8 @@ $ tforge create "Ship v2" --dep TF-12 --dep TF-13 -f priority=high
 ## `tforge update`
 
 Update a ticket. Only the options you pass are changed.
+
+With no options, asks for each field with the current value as the default.
 
 **Usage**:
 
@@ -218,6 +221,7 @@ $ tforge update [OPTIONS] {ref}
 **Examples**:
 
 ```console
+$ tforge update TF-12  # asks for each field, current values as defaults
 $ tforge update TF-12 -s review
 $ tforge update TF-12 -t 'New title' -d ''  # '' clears the description
 $ tforge update TF-12 --add-dep TF-3 --remove-dep TF-4
